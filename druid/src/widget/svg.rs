@@ -129,7 +129,7 @@ impl SvgData {
         "###;
 
         SvgData {
-            tree: Arc::new(usvg::Tree::from_str(empty_svg, &re_opt).unwrap()),
+            tree: Arc::new(usvg::Tree::from_str(empty_svg, &re_opt.to_ref()).unwrap()),
         }
     }
 
@@ -213,7 +213,7 @@ impl FromStr for SvgData {
 
         re_opt.fontdb.load_system_fonts();
 
-        match usvg::Tree::from_str(svg_str, &re_opt) {
+        match usvg::Tree::from_str(svg_str, &re_opt.to_ref()) {
             Ok(tree) => Ok(SvgData {
                 tree: Arc::new(tree),
             }),
