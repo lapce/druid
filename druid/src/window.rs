@@ -16,6 +16,7 @@
 
 use druid_shell::piet::WgpuRenderer;
 use druid_shell::{Modifiers, MouseButtons};
+use glutin::dpi::PhysicalSize;
 use std::cell::RefCell;
 use std::collections::{HashMap, VecDeque};
 use std::mem;
@@ -89,7 +90,8 @@ impl<T> Window<T> {
         size.height = size.height.max(1.0);
 
         let scale = handle.get_scale();
-        let mut renderer = WgpuRenderer::new(&handle).unwrap();
+
+        let mut renderer = WgpuRenderer::new(&handle.0).unwrap();
         renderer.set_size(size);
         renderer.set_scale(scale);
 
@@ -273,6 +275,9 @@ impl<T: Data> Window<T> {
                 size.height = size.height.max(1.0);
 
                 self.size = size / self.scale;
+                self.handle
+                    .0
+                    .resize(PhysicalSize::new(size.width as u32, size.height as u32));
                 self.renderer.borrow_mut().set_size(size);
             }
             Event::MouseDown(e) | Event::MouseUp(e) | Event::MouseMove(e) | Event::Wheel(e) => {
@@ -599,6 +604,7 @@ impl<T: Data> Window<T> {
 
         let render_start = std::time::SystemTime::now();
         piet.finish();
+        self.handle.0.swap_buffers();
         // println!(
         //     "paint render took {}",
         //     render_start.elapsed().unwrap().as_micros()

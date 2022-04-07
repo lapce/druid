@@ -77,7 +77,7 @@ pub use common_util::Counter;
 pub use dialog::{FileDialogOptions, FileInfo, FileSpec};
 pub use error::Error;
 pub use hotkey::{HotKey, RawMods, SysMods};
-pub use keyboard::{winit_key, Code, IntoKey, KbKey, KeyEvent, KeyState, Location, Modifiers};
+pub use keyboard::{glutin_key, Code, IntoKey, KbKey, KeyEvent, KeyState, Location, Modifiers};
 pub use menu::Menu;
 pub use mouse::{Cursor, CursorDesc, MouseButton, MouseButtons, MouseEvent};
 pub use region::Region;

@@ -20,7 +20,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use copypasta::ClipboardContext;
-use winit::event_loop::EventLoopProxy;
+use glutin::event_loop::EventLoopProxy;
 
 use crate::clipboard::Clipboard;
 use crate::error::Error;

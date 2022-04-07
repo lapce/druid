@@ -64,7 +64,7 @@ image-all = [
 ]
 
 [dependencies]
-winit = { git = "https://github.com/lapce/winit", branch = "new-keyboard-all" }
+glutin = { git = "https://github.com/lapce/glutin", branch = "new-keyboard-all" }
 druid-shell = { version = "0.7.0", default-features = false, path = "../druid-shell" }
 druid-derive = { version = "0.4.0", path = "../druid-derive" }
 

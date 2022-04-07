@@ -126,11 +126,7 @@
 //! [`usvg` crate]: https://crates.io/crates/usvg
 //! [`image` crate]: https://crates.io/crates/image
 
-#![deny(
-    broken_intra_doc_links,
-    unsafe_code,
-    clippy::trivially_copy_pass_by_ref
-)]
+#![deny(broken_intra_doc_links, clippy::trivially_copy_pass_by_ref)]
 #![warn(missing_docs)]
 #![allow(clippy::new_ret_no_self, clippy::needless_doctest_main)]
 #![cfg_attr(docsrs, feature(doc_cfg))]

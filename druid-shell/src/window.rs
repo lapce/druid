@@ -29,17 +29,16 @@ use crate::mouse::{Cursor, CursorDesc, MouseEvent};
 use crate::region::Region;
 use crate::scale::Scale;
 use crate::text::{Event, InputHandler};
-use piet_wgpu::PietText;
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
-use winit::dpi::{LogicalPosition, LogicalSize};
-use winit::event_loop::{EventLoopProxy, EventLoopWindowTarget};
+use glutin::dpi::{LogicalPosition, LogicalSize};
+use glutin::event_loop::{EventLoopProxy, EventLoopWindowTarget};
 #[cfg(target_os = "macos")]
-use winit::platform::macos::WindowBuilderExtMacOS;
-use winit::window::CursorIcon;
+use glutin::platform::macos::WindowBuilderExtMacOS;
+use glutin::window::CursorIcon;
+use piet_wgpu::PietText;
 
 pub enum WinitEvent {
     Idle(IdleToken),
-    Timer(winit::window::WindowId, TimerToken, std::time::Duration),
+    Timer(glutin::window::WindowId, TimerToken, std::time::Duration),
     NewWindow,
 }
 
@@ -183,11 +182,14 @@ pub enum WindowState {
 
 /// A handle to a platform window object.
 #[derive(Clone)]
-pub struct WindowHandle(Arc<winit::window::Window>, Arc<EventLoopProxy<WinitEvent>>);
+pub struct WindowHandle(
+    pub Arc<glutin::ContextWrapper<glutin::PossiblyCurrent, glutin::window::Window>>,
+    Arc<EventLoopProxy<WinitEvent>>,
+);
 
 impl WindowHandle {
-    pub fn id(&self) -> winit::window::WindowId {
-        self.0.id()
+    pub fn id(&self) -> glutin::window::WindowId {
+        self.0.window().id()
     }
     /// Make this window visible.
     ///
@@ -200,24 +202,24 @@ impl WindowHandle {
 
     /// Set whether the window should be resizable
     pub fn resizable(&self, resizable: bool) {
-        self.0.set_resizable(resizable);
+        self.0.window().set_resizable(resizable);
     }
 
     /// Sets the state of the window.
     pub fn set_window_state(&mut self, state: WindowState) {
         match state {
-            WindowState::Maximized => self.0.set_maximized(true),
-            WindowState::Minimized => self.0.set_minimized(true),
+            WindowState::Maximized => self.0.window().set_maximized(true),
+            WindowState::Minimized => self.0.window().set_minimized(true),
             WindowState::Restored => {
-                self.0.set_maximized(false);
-                self.0.set_minimized(false);
+                self.0.window().set_maximized(false);
+                self.0.window().set_minimized(false);
             }
         }
     }
 
     /// Gets the state of the window.
     pub fn get_window_state(&self) -> WindowState {
-        let maximized = self.0.is_maximized();
+        let maximized = self.0.window().is_maximized();
         if maximized {
             WindowState::Maximized
         } else {
@@ -241,6 +243,7 @@ impl WindowHandle {
     pub fn set_position(&self, position: impl Into<Point>) {
         let point: Point = position.into();
         self.0
+            .window()
             .set_outer_position(LogicalPosition::new(point.x, point.y));
     }
 
@@ -251,6 +254,7 @@ impl WindowHandle {
     pub fn get_position(&self) -> Point {
         let point = self
             .0
+            .window()
             .outer_position()
             .map(|p| Point::new(p.x.into(), p.y.into()));
         point.unwrap_or(Point::ZERO)
@@ -270,9 +274,10 @@ impl WindowHandle {
     ///
     /// [display points]: crate::Scale
     pub fn content_insets(&self) -> Insets {
-        let outer_size = self.0.outer_size();
+        let outer_size = self.0.window().outer_size();
         let outer_position = self
             .0
+            .window()
             .outer_position()
             .map(|p| Point::new(p.x.into(), p.y.into()))
             .unwrap_or(Point::ZERO);
@@ -280,9 +285,10 @@ impl WindowHandle {
             .to_rect()
             .with_origin(outer_position);
 
-        let inner_size = self.0.inner_size();
+        let inner_size = self.0.window().inner_size();
         let inner_position = self
             .0
+            .window()
             .inner_position()
             .map(|p| Point::new(p.x.into(), p.y.into()))
             .unwrap_or(Point::ZERO);
@@ -305,6 +311,7 @@ impl WindowHandle {
     pub fn set_size(&self, size: impl Into<Size>) {
         let size: Size = size.into();
         self.0
+            .window()
             .set_inner_size(LogicalSize::new(size.width, size.height));
     }
 
@@ -312,7 +319,7 @@ impl WindowHandle {
     ///
     /// [display points]: crate::Scale
     pub fn get_size(&self) -> Size {
-        let inner_size = self.0.inner_size();
+        let inner_size = self.0.window().inner_size();
         Size::new(inner_size.width.into(), inner_size.height.into())
     }
 
@@ -335,22 +342,22 @@ impl WindowHandle {
     /// [`paint`]: WinHandler::paint
     /// [`prepare_paint`]: WinHandler::prepare_paint
     pub fn request_anim_frame(&self) {
-        self.0.request_redraw();
+        self.0.window().request_redraw();
     }
 
     /// Request invalidation of the entire window contents.
     pub fn invalidate(&self) {
-        self.0.request_redraw();
+        self.0.window().request_redraw();
     }
 
     /// Request invalidation of a region of the window.
     pub fn invalidate_rect(&self, rect: Rect) {
-        self.0.request_redraw();
+        self.0.window().request_redraw();
     }
 
     /// Set the title for this menu.
     pub fn set_title(&self, title: &str) {
-        self.0.set_title(title)
+        self.0.window().set_title(title)
     }
 
     /// Set the top-level menu for this window.
@@ -422,7 +429,7 @@ impl WindowHandle {
             Cursor::ResizeLeftRight => CursorIcon::ColResize,
             Cursor::ResizeUpDown => CursorIcon::RowResize,
         };
-        self.0.set_cursor_icon(cursor);
+        self.0.window().set_cursor_icon(cursor);
     }
 
     pub fn make_cursor(&self, desc: &CursorDesc) -> Option<Cursor> {
@@ -463,19 +470,13 @@ impl WindowHandle {
     /// the platform DPI changes. This means you should not stash it and rely on it later; it is
     /// only guaranteed to be valid for the current pass of the runloop.
     pub fn get_scale(&self) -> f64 {
-        self.0.scale_factor()
-    }
-}
-
-unsafe impl HasRawWindowHandle for WindowHandle {
-    fn raw_window_handle(&self) -> RawWindowHandle {
-        self.0.raw_window_handle()
+        self.0.window().scale_factor()
     }
 }
 
 /// A builder type for creating new windows.
 pub struct WindowBuilder(
-    winit::window::WindowBuilder,
+    glutin::window::WindowBuilder,
     Arc<EventLoopProxy<WinitEvent>>,
 );
 
@@ -485,7 +486,7 @@ impl WindowBuilder {
     /// Takes the [`Application`](crate::Application) that this window is for.
     pub fn new(app: Application) -> WindowBuilder {
         let event_proxy = app.state.borrow().event_proxy.clone();
-        WindowBuilder(winit::window::WindowBuilder::new(), event_proxy)
+        WindowBuilder(glutin::window::WindowBuilder::new(), event_proxy)
     }
 
     /// Set the [`WinHandler`] for this window.
@@ -593,9 +594,17 @@ impl WindowBuilder {
         window_target: &EventLoopWindowTarget<T>,
     ) -> Result<WindowHandle, Error> {
         let event_proxy = self.1.clone();
-        self.0
-            .build(window_target)
-            .map(|w| WindowHandle(Arc::new(w), event_proxy))
+        glutin::ContextBuilder::new()
+            // .with_multisampling(4)
+            .with_vsync(false)
+            .build_windowed(self.0, window_target)
+            .map_err(|e| Error::Other(std::sync::Arc::new(anyhow::anyhow!("{}", e))))
+            .and_then(|c| {
+                unsafe { c.make_current() }.map_err(|e| {
+                    Error::Other(std::sync::Arc::new(anyhow::anyhow!("can't make current ")))
+                })
+            })
+            .map(|context| WindowHandle(Arc::new(context), event_proxy))
             .map_err(|e| Error::Other(std::sync::Arc::new(anyhow::anyhow!("{}", e))))
     }
 }

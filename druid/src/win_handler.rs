@@ -41,7 +41,7 @@ use crate::app::{PendingWindow, WindowConfig};
 use crate::command::sys as sys_cmd;
 use druid_shell::kurbo::Point;
 use druid_shell::{Modifiers, MouseButtons, WindowBuilder, WinitEvent};
-use winit::event_loop::{EventLoop, EventLoopProxy, EventLoopWindowTarget};
+use glutin::event_loop::{EventLoop, EventLoopProxy, EventLoopWindowTarget};
 
 pub(crate) const RUN_COMMANDS_TOKEN: IdleToken = IdleToken::new(1);
 
@@ -94,7 +94,7 @@ pub(crate) struct InnerAppState<T> {
     file_dialogs: HashMap<FileDialogToken, DialogInfo>,
     ext_event_host: ExtEventHost,
     pub(crate) windows: Windows<T>,
-    pub(crate) winit_windows: HashMap<winit::window::WindowId, WindowId>,
+    pub(crate) winit_windows: HashMap<glutin::window::WindowId, WindowId>,
     pub(crate) new_window: Option<WindowDesc<T>>,
     /// the application-level menu, only set on macos and only if there
     /// are no open windows.
@@ -578,13 +578,13 @@ impl<T: Data> AppState<T> {
 
     pub(crate) fn get_mouse_buttons(
         &self,
-        window_id: &winit::window::WindowId,
+        window_id: glutin::window::WindowId,
     ) -> Option<MouseButtons> {
         let window_id = {
             self.inner
                 .borrow()
                 .winit_windows
-                .get(window_id)
+                .get(&window_id)
                 .map(|w| w.clone())
         };
         if let Some(window_id) = window_id {
@@ -595,12 +595,12 @@ impl<T: Data> AppState<T> {
         None
     }
 
-    pub(crate) fn get_mouse_pos(&self, window_id: &winit::window::WindowId) -> Option<Point> {
+    pub(crate) fn get_mouse_pos(&self, window_id: glutin::window::WindowId) -> Option<Point> {
         let window_id = {
             self.inner
                 .borrow()
                 .winit_windows
-                .get(window_id)
+                .get(&window_id)
                 .map(|w| w.clone())
         };
         if let Some(window_id) = window_id {
@@ -611,12 +611,12 @@ impl<T: Data> AppState<T> {
         None
     }
 
-    pub(crate) fn get_scale(&self, window_id: &winit::window::WindowId) -> Option<f64> {
+    pub(crate) fn get_scale(&self, window_id: glutin::window::WindowId) -> Option<f64> {
         let window_id = {
             self.inner
                 .borrow()
                 .winit_windows
-                .get(window_id)
+                .get(&window_id)
                 .map(|w| w.clone())
         };
         if let Some(window_id) = window_id {
@@ -627,12 +627,12 @@ impl<T: Data> AppState<T> {
         None
     }
 
-    pub(crate) fn set_mods(&self, window_id: &winit::window::WindowId, mods: Modifiers) {
+    pub(crate) fn set_mods(&self, window_id: glutin::window::WindowId, mods: Modifiers) {
         let window_id = {
             self.inner
                 .borrow()
                 .winit_windows
-                .get(window_id)
+                .get(&window_id)
                 .map(|w| w.clone())
         };
         if let Some(window_id) = window_id {
@@ -642,12 +642,12 @@ impl<T: Data> AppState<T> {
         }
     }
 
-    pub(crate) fn get_mods(&self, window_id: &winit::window::WindowId) -> Option<Modifiers> {
+    pub(crate) fn get_mods(&self, window_id: glutin::window::WindowId) -> Option<Modifiers> {
         let window_id = {
             self.inner
                 .borrow()
                 .winit_windows
-                .get(window_id)
+                .get(&window_id)
                 .map(|w| w.clone())
         };
         if let Some(window_id) = window_id {
@@ -668,13 +668,13 @@ impl<T: Data> AppState<T> {
     pub(crate) fn do_winit_window_event(
         &mut self,
         event: Event,
-        window_id: &winit::window::WindowId,
+        window_id: glutin::window::WindowId,
     ) {
         let window_id = {
             self.inner
                 .borrow()
                 .winit_windows
-                .get(window_id)
+                .get(&window_id)
                 .map(|w| w.clone())
         };
         if let Some(window_id) = window_id {
@@ -703,12 +703,12 @@ impl<T: Data> AppState<T> {
         self.inner.borrow_mut().prepare_paint(window_id);
     }
 
-    pub(crate) fn paint_winit_window(&mut self, window_id: &winit::window::WindowId) {
+    pub(crate) fn paint_winit_window(&mut self, window_id: glutin::window::WindowId) {
         let window_id = {
             self.inner
                 .borrow()
                 .winit_windows
-                .get(window_id)
+                .get(&window_id)
                 .map(|w| w.clone())
         };
         if let Some(window_id) = window_id {
@@ -930,12 +930,12 @@ impl<T: Data> AppState<T> {
         self.inner.borrow().windows.count()
     }
 
-    pub(crate) fn request_close_wint_window(&mut self, id: &winit::window::WindowId) {
+    pub(crate) fn request_close_wint_window(&mut self, id: glutin::window::WindowId) {
         let window_id = {
             self.inner
                 .borrow_mut()
                 .winit_windows
-                .remove(id)
+                .remove(&id)
                 .map(|w| w.clone())
         };
         if let Some(window_id) = window_id {
