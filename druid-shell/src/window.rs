@@ -594,19 +594,39 @@ impl WindowBuilder {
         window_target: &EventLoopWindowTarget<T>,
     ) -> Result<WindowHandle, Error> {
         let event_proxy = self.1.clone();
-        glutin::ContextBuilder::new()
-            // .with_multisampling(4)
-            .with_vsync(false)
-            .build_windowed(self.0, window_target)
-            .map_err(|e| Error::Other(std::sync::Arc::new(anyhow::anyhow!("{}", e))))
-            .and_then(|c| {
-                unsafe { c.make_current() }.map_err(|e| {
-                    Error::Other(std::sync::Arc::new(anyhow::anyhow!("can't make current ")))
-                })
-            })
-            .map(|context| WindowHandle(Arc::new(context), event_proxy))
-            .map_err(|e| Error::Other(std::sync::Arc::new(anyhow::anyhow!("{}", e))))
+
+        let mut result = create_gl(self.0.clone(), window_target, true);
+        if result.is_err() {
+            result = create_gl(self.0, window_target, false);
+        }
+
+        result.map(|c| WindowHandle(Arc::new(c), event_proxy))
     }
+}
+
+fn create_gl<T: 'static>(
+    builder: glutin::window::WindowBuilder,
+    window_target: &EventLoopWindowTarget<T>,
+    srgb: bool,
+) -> Result<glutin::ContextWrapper<glutin::PossiblyCurrent, glutin::window::Window>, Error> {
+    glutin::ContextBuilder::new()
+        .with_srgb(srgb)
+        .with_vsync(false)
+        .build_windowed(builder, window_target)
+        .map_err(|e| {
+            Error::Other(std::sync::Arc::new(anyhow::anyhow!(
+                "window build error: {}",
+                e
+            )))
+        })
+        .and_then(|c| {
+            unsafe { c.make_current() }.map_err(|e| {
+                Error::Other(std::sync::Arc::new(anyhow::anyhow!(
+                    "can't make current {:?}",
+                    e
+                )))
+            })
+        })
 }
 
 /// App behavior, supplied by the app.
