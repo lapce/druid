@@ -284,6 +284,7 @@ impl<T: Data> AppLauncher<T> {
         event_loop.run(move |event, event_loop, control_flow| match event {
             glutin::event::Event::NewEvents(cause) => match cause {
                 glutin::event::StartCause::Init => {
+                    state.do_window_event(Event::ApplicationInit, WindowId::next());
                     *control_flow = ControlFlow::Wait;
                 }
                 glutin::event::StartCause::ResumeTimeReached {

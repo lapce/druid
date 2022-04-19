@@ -595,10 +595,8 @@ impl WindowBuilder {
     ) -> Result<WindowHandle, Error> {
         let event_proxy = self.1.clone();
 
-        let mut result = create_gl(self.0.clone(), window_target, true);
-        if result.is_err() {
-            result = create_gl(self.0, window_target, false);
-        }
+        let result = create_gl(self.0.clone(), window_target, true)
+            .or_else(|_| create_gl(self.0, window_target, false));
 
         result.map(|c| WindowHandle(Arc::new(c), event_proxy))
     }
