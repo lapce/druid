@@ -613,8 +613,9 @@ fn create_gl<T: 'static>(
         .build_windowed(builder, window_target)
         .map_err(|e| {
             Error::Other(std::sync::Arc::new(anyhow::anyhow!(
-                "window build error: {}",
-                e
+                "window build error: {} srgb {}",
+                e,
+                srgb
             )))
         })
         .and_then(|c| {
