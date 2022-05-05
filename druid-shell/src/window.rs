@@ -610,6 +610,7 @@ fn create_gl<T: 'static>(
     glutin::ContextBuilder::new()
         .with_srgb(srgb)
         .with_vsync(false)
+        .with_pixel_format(24, 0)
         .build_windowed(builder, window_target)
         .map_err(|e| {
             Error::Other(std::sync::Arc::new(anyhow::anyhow!(
