@@ -156,6 +156,7 @@ pub struct WidgetState {
     /// The result of merging up children cursors. This gets cleared when merging state up (unlike
     /// cursor_change, which is persistent).
     pub(crate) cursor: Option<Cursor>,
+    pub(crate) cursor_from_child: bool,
 
     // Port -> Host
     pub(crate) sub_window_hosts: Vec<(WindowId, WidgetId)>,
@@ -1251,6 +1252,7 @@ impl WidgetState {
             timers: HashMap::new(),
             cursor_change: CursorChange::Default,
             cursor: None,
+            cursor_from_child: false,
             sub_window_hosts: Vec::new(),
             is_explicitly_disabled_new: false,
             text_registrations: Vec::new(),
@@ -1321,13 +1323,18 @@ impl WidgetState {
         let child_cursor = child_state.take_cursor();
         if let CursorChange::Override(cursor) = &self.cursor_change {
             self.cursor = Some(cursor.clone());
-        } else if child_state.has_active || child_state.is_hot {
+            self.cursor_from_child = false;
+        } else if (child_state.has_active || child_state.is_hot)
+            && (self.cursor.is_none() || !self.cursor_from_child)
+        {
             self.cursor = child_cursor;
+            self.cursor_from_child = true;
         }
 
         if self.cursor.is_none() {
             if let CursorChange::Set(cursor) = &self.cursor_change {
                 self.cursor = Some(cursor.clone());
+                self.cursor_from_child = false;
             }
         }
     }
