@@ -455,6 +455,13 @@ impl Event {
             | Event::Zoom(_) => false,
         }
     }
+
+    pub(crate) fn is_mouse(&self) -> bool {
+        matches!(
+            self,
+            Event::MouseDown(_) | Event::MouseUp(_) | Event::MouseMove(_)
+        )
+    }
 }
 
 impl LifeCycle {
