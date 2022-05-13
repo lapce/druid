@@ -42,6 +42,7 @@ use tracing::{debug, error, info};
 #[cfg(feature = "raw-win-handle")]
 use raw_window_handle::{macos::MacOSHandle, HasRawWindowHandle, RawWindowHandle};
 
+use crate::gl::{GlAttributes, PixelFormatRequirements};
 use crate::kurbo::{Insets, Point, Rect, Size, Vec2};
 use crate::piet::{Piet, PietText, RenderContext};
 
@@ -50,6 +51,7 @@ use super::appkit::{
 };
 use super::application::Application;
 use super::dialog;
+use super::gl::{create_gl_context, Context};
 use super::keyboard::{make_modifiers, KeyboardState};
 use super::menu::Menu;
 use super::text_input::NSRange;
@@ -101,6 +103,7 @@ pub(crate) struct WindowHandle {
     /// This is an NSView, as our concept of "window" is more the top-level container holding
     /// a view. Also, this is better for hosted applications such as VST.
     nsview: WeakPtr,
+    gl_context: Context,
     idle_queue: Weak<Mutex<Vec<IdleKind>>>,
 }
 impl PartialEq for WindowHandle {
@@ -126,6 +129,7 @@ impl Default for WindowHandle {
     fn default() -> Self {
         WindowHandle {
             nsview: unsafe { WeakPtr::new(nil) },
+            gl_context: Default::default(),
             idle_queue: Default::default(),
         }
     }
@@ -144,6 +148,8 @@ pub(crate) struct WindowBuilder {
     resizable: bool,
     show_titlebar: bool,
     transparent: bool,
+    pf_reqs: Option<PixelFormatRequirements>,
+    gl_attr: Option<GlAttributes>,
 }
 
 #[derive(Clone)]
@@ -198,6 +204,8 @@ impl WindowBuilder {
             resizable: true,
             show_titlebar: true,
             transparent: false,
+            pf_reqs: None,
+            gl_attr: None,
         }
     }
 
@@ -290,6 +298,12 @@ impl WindowBuilder {
             let frame = NSView::frame(content_view);
             view.initWithFrame_(frame);
 
+            let gl_context = create_gl_context(
+                view,
+                &self.pf_reqs.unwrap_or_default(),
+                &self.gl_attr.unwrap_or_default(),
+            )?;
+
             let () = msg_send![window, setDelegate: view];
 
             if let Some(menu) = self.menu {
@@ -301,6 +315,7 @@ impl WindowBuilder {
             let view_state = &mut *(view_state as *mut ViewState);
             let mut handle = WindowHandle {
                 nsview: view_state.nsview.clone(),
+                gl_context,
                 idle_queue,
             };
 

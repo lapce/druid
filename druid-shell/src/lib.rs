@@ -61,6 +61,7 @@ mod clipboard;
 mod common_util;
 mod dialog;
 mod error;
+mod gl;
 mod hotkey;
 mod keyboard;
 mod menu;

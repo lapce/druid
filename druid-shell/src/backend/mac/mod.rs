@@ -21,6 +21,7 @@ pub mod application;
 pub mod clipboard;
 pub mod dialog;
 pub mod error;
+mod gl;
 mod keyboard;
 pub mod menu;
 pub mod screen;
