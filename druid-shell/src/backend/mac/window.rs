@@ -23,20 +23,20 @@ use std::time::Instant;
 
 use block::ConcreteBlock;
 use cocoa::appkit::{
-    CGFloat, NSApp, NSApplication, NSAutoresizingMaskOptions, NSBackingStoreBuffered, NSColor,
-    NSEvent, NSView, NSViewHeightSizable, NSViewWidthSizable, NSWindow, NSWindowStyleMask,
+    self, CGFloat, NSApp, NSApplication, NSAutoresizingMaskOptions, NSBackingStoreBuffered,
+    NSColor, NSEvent, NSOpenGLContext, NSScreen, NSView, NSViewHeightSizable, NSViewWidthSizable,
+    NSWindow, NSWindowStyleMask,
 };
 use cocoa::base::{id, nil, BOOL, NO, YES};
 use cocoa::foundation::{
     NSArray, NSAutoreleasePool, NSInteger, NSPoint, NSRect, NSSize, NSString, NSUInteger,
 };
-use core_graphics::context::CGContextRef;
-use foreign_types::ForeignTypeRef;
 use lazy_static::lazy_static;
 use objc::declare::ClassDecl;
 use objc::rc::WeakPtr;
 use objc::runtime::{Class, Object, Protocol, Sel};
 use objc::{class, msg_send, sel, sel_impl};
+use piet_wgpu::WgpuRenderer;
 use tracing::{debug, error, info};
 
 #[cfg(feature = "raw-win-handle")]
@@ -173,6 +173,7 @@ enum IdleKind {
 
 /// This is the state associated with our custom NSView.
 struct ViewState {
+    nswindow: WeakPtr,
     nsview: WeakPtr,
     handler: Box<dyn WinHandler>,
     idle_queue: Arc<Mutex<Vec<IdleKind>>>,
@@ -181,7 +182,8 @@ struct ViewState {
     // Tracks whether we have already received the mouseExited event
     mouse_left: bool,
     keyboard_state: KeyboardState,
-    text: PietText,
+    gl_context: Context,
+    renderer: WgpuRenderer,
     active_text_input: Option<TextFieldToken>,
     parent: Option<crate::WindowHandle>,
 }
@@ -293,16 +295,29 @@ impl WindowBuilder {
 
             window.setTitle_(make_nsstring(&self.title));
 
-            let (view, idle_queue) = make_view(self.handler.expect("view"));
             let content_view = window.contentView();
-            let frame = NSView::frame(content_view);
-            view.initWithFrame_(frame);
 
             let gl_context = create_gl_context(
-                view,
+                content_view,
                 &self.pf_reqs.unwrap_or_default(),
                 &self.gl_attr.unwrap_or_default(),
             )?;
+
+            let _: () = msg_send![*gl_context.context.load(), update];
+            gl_context.context.load().makeCurrentContext();
+            let renderer = WgpuRenderer::new(|s| gl_context.get_proc_address(s) as *const _)
+                .map_err(|_| {
+                    Error::Other(anyhow::anyhow!("create opengl backend failed").into())
+                })?;
+
+            let view = make_view(
+                window,
+                self.handler.expect("view"),
+                gl_context.clone(),
+                renderer,
+            );
+            let frame = NSView::frame(content_view);
+            view.initWithFrame_(frame);
 
             let () = msg_send![window, setDelegate: view];
 
@@ -311,12 +326,13 @@ impl WindowBuilder {
             }
 
             content_view.addSubview_(view);
+
             let view_state: *mut c_void = *(*view).get_ivar("viewState");
             let view_state = &mut *(view_state as *mut ViewState);
             let mut handle = WindowHandle {
-                nsview: view_state.nsview.clone(),
+                nsview: WeakPtr::new(view),
                 gl_context,
-                idle_queue,
+                idle_queue: Arc::downgrade(&view_state.idle_queue),
             };
 
             if let Some(window_state) = self.window_state {
@@ -334,13 +350,21 @@ impl WindowBuilder {
             }
 
             // set_window_state above could have invalidated the frame size
-            let frame = NSView::frame(content_view);
+            let scale = NSScreen::backingScaleFactor(window) as f64;
 
+            let frame = NSView::frame(content_view);
             (*view_state).handler.connect(&handle.clone().into());
-            (*view_state).handler.scale(Scale::default());
+            (*view_state).handler.scale(Scale::new(scale, scale));
             (*view_state)
                 .handler
                 .size(Size::new(frame.size.width, frame.size.height));
+
+            let renderer = &mut (*view_state).renderer;
+            renderer.set_size(Size::new(
+                frame.size.width * scale,
+                frame.size.height * scale,
+            ));
+            renderer.set_scale(scale);
 
             Ok(handle)
         }
@@ -392,6 +416,10 @@ lazy_static! {
             }
         }
 
+        decl.add_method(
+            sel!(windowDidChangeBackingProperties:),
+            window_did_change_backing_properties as extern "C" fn(&mut Object, Sel, id),
+        );
         decl.add_method(
             sel!(windowDidBecomeKey:),
             window_did_become_key as extern "C" fn(&mut Object, Sel, id),
@@ -557,26 +585,14 @@ pub(super) fn with_edit_lock_from_window<R>(
     Some(r)
 }
 
-fn make_view(handler: Box<dyn WinHandler>) -> (id, Weak<Mutex<Vec<IdleKind>>>) {
-    let idle_queue = Arc::new(Mutex::new(Vec::new()));
-    let queue_handle = Arc::downgrade(&idle_queue);
+fn make_view(
+    window: id,
+    handler: Box<dyn WinHandler>,
+    gl_context: Context,
+    renderer: WgpuRenderer,
+) -> id {
     unsafe {
-        let view: id = msg_send![VIEW_CLASS.0, new];
-        let nsview = WeakPtr::new(view);
-        let keyboard_state = KeyboardState::new();
-        let state = ViewState {
-            nsview,
-            handler,
-            idle_queue,
-            focus_click: false,
-            mouse_left: true,
-            keyboard_state,
-            text: PietText::new_with_unique_state(),
-            active_text_input: None,
-            parent: None,
-        };
-        let state_ptr = Box::into_raw(Box::new(state));
-        (*view).set_ivar("viewState", state_ptr as *mut c_void);
+        let view: id = msg_send![VIEW_CLASS.0, alloc];
         let options: NSAutoresizingMaskOptions = NSViewWidthSizable | NSViewHeightSizable;
         view.setAutoresizingMask_(options);
 
@@ -592,7 +608,35 @@ fn make_view(handler: Box<dyn WinHandler>) -> (id, Weak<Mutex<Vec<IdleKind>>>) {
             .autorelease();
         view.addTrackingArea(tracking_area);
 
-        (view.autorelease(), queue_handle)
+        view.setWantsBestResolutionOpenGLSurface_(YES);
+
+        // On Mojave, views automatically become layer-backed shortly after being added to
+        // a window. Changing the layer-backedness of a view breaks the association between
+        // the view and its associated OpenGL context. To work around this, on Mojave we
+        // explicitly make the view layer-backed up front so that AppKit doesn't do it
+        // itself and break the association with its context.
+        if f64::floor(appkit::NSAppKitVersionNumber) > appkit::NSAppKitVersionNumber10_12 {
+            view.setWantsLayer(YES);
+        }
+
+        let view_state = ViewState {
+            nswindow: WeakPtr::new(window),
+            nsview: WeakPtr::new(view),
+            handler,
+            idle_queue: Arc::new(Mutex::new(Vec::new())),
+            focus_click: false,
+            mouse_left: true,
+            keyboard_state: KeyboardState::new(),
+            renderer,
+            gl_context,
+            active_text_input: None,
+            parent: None,
+        };
+
+        let state_ptr = Box::into_raw(Box::new(view_state)) as *mut c_void;
+        (*view).set_ivar("viewState", state_ptr as *mut c_void);
+
+        view.autorelease()
     }
 }
 
@@ -621,6 +665,11 @@ extern "C" fn set_frame_size(this: &mut Object, _: Sel, size: NSSize) {
         (*view_state)
             .handler
             .size(Size::new(size.width, size.height));
+        let renderer = &mut (*view_state).renderer;
+        let scale = NSScreen::backingScaleFactor(*(view_state).nswindow.load()) as f64;
+        renderer.set_size(Size::new(size.width * scale, size.height * scale));
+        renderer.set_scale(scale);
+        (*view_state).gl_context.context.load().update();
         let superclass = msg_send![this, superclass];
         let () = msg_send![super(this, superclass), setFrameSize: size];
     }
@@ -863,13 +912,6 @@ extern "C" fn view_will_draw(this: &mut Object, _: Sel) {
 
 extern "C" fn draw_rect(this: &mut Object, _: Sel, dirtyRect: NSRect) {
     unsafe {
-        let context: id = msg_send![class![NSGraphicsContext], currentContext];
-        //FIXME: when core_graphics is at 0.20, we should be able to use
-        //core_graphics::sys::CGContextRef as our pointer type.
-        let cgcontext_ptr: *mut <CGContextRef as ForeignTypeRef>::CType =
-            msg_send![context, CGContext];
-        let cgcontext_ref = CGContextRef::from_ptr_mut(cgcontext_ptr);
-
         // FIXME: use the actual invalid region instead of just this bounding box.
         // https://developer.apple.com/documentation/appkit/nsview/1483772-getrectsbeingdrawn?language=objc
         let rect = Rect::from_origin_size(
@@ -880,12 +922,17 @@ extern "C" fn draw_rect(this: &mut Object, _: Sel, dirtyRect: NSRect) {
 
         let view_state: *mut c_void = *this.get_ivar("viewState");
         let view_state = &mut *(view_state as *mut ViewState);
-        let mut piet_ctx = Piet::new_y_down(cgcontext_ref, Some(view_state.text.clone()));
+        let renderer = &mut (*view_state).renderer;
+        let mut piet_ctx = Piet::new(renderer);
 
         (*view_state).handler.paint(&mut piet_ctx, &invalid);
         if let Err(e) = piet_ctx.finish() {
             error!("{}", e)
         }
+
+        let pool = NSAutoreleasePool::new(nil);
+        (*view_state).gl_context.context.load().flushBuffer();
+        let _: () = msg_send![pool, release];
 
         let superclass = msg_send![this, superclass];
         let () = msg_send![super(this, superclass), drawRect: dirtyRect];
@@ -985,6 +1032,24 @@ extern "C" fn show_context_menu(this: &mut Object, _: Sel, item: id) {
         let bounds: NSRect = msg_send![this as *const _, bounds];
         location.y = bounds.size.height - location.y;
         let _: BOOL = msg_send![item, popUpMenuPositioningItem: nil atLocation: location inView: this as *const _];
+    }
+}
+
+extern "C" fn window_did_change_backing_properties(this: &mut Object, _: Sel, _notification: id) {
+    unsafe {
+        let view_state: *mut c_void = *this.get_ivar("viewState");
+        let view_state = &mut *(view_state as *mut ViewState);
+
+        let frame = NSView::frame(*(view_state).nsview.load());
+        let scale = NSScreen::backingScaleFactor(*(view_state).nswindow.load()) as f64;
+
+        let renderer = &mut (*view_state).renderer;
+        renderer.set_size(Size::new(
+            frame.size.width * scale,
+            frame.size.height * scale,
+        ));
+        renderer.set_scale(scale);
+        (*view_state).gl_context.context.load().update();
     }
 }
 
@@ -1124,13 +1189,9 @@ impl WindowHandle {
     pub fn text(&self) -> PietText {
         let view = self.nsview.load();
         unsafe {
-            if let Some(view) = (*view).as_ref() {
-                let state: *mut c_void = *view.get_ivar("viewState");
-                (*(state as *mut ViewState)).text.clone()
-            } else {
-                // this codepath should only happen during tests in druid, when view is nil
-                PietText::new_with_unique_state()
-            }
+            let view = (*view).as_ref().unwrap();
+            let state: *mut c_void = *view.get_ivar("viewState");
+            (*(state as *mut ViewState)).renderer.text()
         }
     }
 
@@ -1423,6 +1484,13 @@ impl WindowHandle {
     pub fn get_scale(&self) -> Result<Scale, Error> {
         // TODO: Get actual Scale
         Ok(Scale::new(1.0, 1.0))
+    }
+
+    pub fn make_current(&self) {
+        unsafe {
+            let _: () = msg_send![*self.gl_context.context.load(), update];
+            self.gl_context.context.load().makeCurrentContext();
+        }
     }
 }
 

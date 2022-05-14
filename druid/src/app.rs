@@ -137,8 +137,18 @@ impl<T: Data> PendingWindow<T> {
 }
 
 impl<T: Data> AppLauncher<T> {
+    pub fn new() -> Self {
+        AppLauncher {
+            windows: vec![],
+            env_setup: None,
+            l10n_resources: None,
+            delegate: None,
+            ext_event_host: ExtEventHost::new(),
+        }
+    }
+
     /// Create a new `AppLauncher` with the provided window.
-    pub fn with_window(window: WindowDesc<T>) -> Self {
+    pub fn with_window(self, window: WindowDesc<T>) -> Self {
         AppLauncher {
             windows: vec![window],
             env_setup: None,
@@ -462,6 +472,17 @@ impl<T: Data> WindowDesc<T> {
             pending: PendingWindow::new(root),
             config: WindowConfig::default(),
             id: WindowId::next(),
+        }
+    }
+
+    pub fn new_with_id<W>(id: WindowId, root: W) -> WindowDesc<T>
+    where
+        W: Widget<T> + 'static,
+    {
+        WindowDesc {
+            pending: PendingWindow::new(root),
+            config: WindowConfig::default(),
+            id,
         }
     }
 

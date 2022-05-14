@@ -29,7 +29,7 @@ use crate::mouse::{Cursor, CursorDesc, MouseEvent};
 use crate::region::Region;
 use crate::scale::Scale;
 use crate::text::{Event, InputHandler};
-use piet_common::PietText;
+use piet_wgpu::PietText;
 #[cfg(feature = "raw-win-handle")]
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
 
@@ -416,6 +416,10 @@ impl WindowHandle {
     pub fn get_scale(&self) -> Result<Scale, Error> {
         self.0.get_scale().map_err(Into::into)
     }
+
+    pub fn make_current(&self) {
+        self.0.make_current();
+    }
 }
 
 #[cfg(feature = "raw-win-handle")]
@@ -557,7 +561,7 @@ pub trait WinHandler {
     /// Request the handler to paint the window contents.  `invalid` is the region in [display
     /// points](crate::Scale) that needs to be repainted; painting outside the invalid region will
     /// have no effect.
-    fn paint(&mut self, piet: &mut piet_common::Piet, invalid: &Region);
+    fn paint(&mut self, piet: &mut piet_wgpu::Piet, invalid: &Region);
 
     /// Called when the resources need to be rebuilt.
     ///

@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use anyhow::anyhow;
 use cgl::{kCGLCECrashOnRemovedFunctions, CGLEnable};
 use cocoa::appkit::NSOpenGLPixelFormatAttribute::{
@@ -8,6 +10,9 @@ use cocoa::appkit::NSOpenGLPixelFormatAttribute::{
 };
 use cocoa::appkit::{self, NSOpenGLContext, NSOpenGLPFAOpenGLProfiles, NSOpenGLPixelFormat};
 use cocoa::base::{id, nil};
+use core_foundation::base::TCFType;
+use core_foundation::bundle::{CFBundleGetBundleWithIdentifier, CFBundleGetFunctionPointerForName};
+use core_foundation::string::CFString;
 use objc::rc::WeakPtr;
 use objc::{msg_send, sel, sel_impl};
 use NSOpenGLPFAOpenGLProfiles::{
@@ -22,7 +27,7 @@ use crate::Error;
 
 #[derive(Clone)]
 pub(crate) struct Context {
-    context: WeakPtr,
+    pub(crate) context: WeakPtr,
 }
 
 impl Default for Context {
@@ -30,6 +35,19 @@ impl Default for Context {
         Self {
             context: unsafe { WeakPtr::new(nil) },
         }
+    }
+}
+
+impl Context {
+    pub(crate) fn get_proc_address(&self, addr: &str) -> *const core::ffi::c_void {
+        let symbol_name: CFString = FromStr::from_str(addr).unwrap();
+        let framework_name: CFString = FromStr::from_str("com.apple.opengl").unwrap();
+        let framework =
+            unsafe { CFBundleGetBundleWithIdentifier(framework_name.as_concrete_TypeRef()) };
+        let symbol = unsafe {
+            CFBundleGetFunctionPointerForName(framework, symbol_name.as_concrete_TypeRef())
+        };
+        symbol as *const _
     }
 }
 

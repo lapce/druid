@@ -108,14 +108,14 @@ impl ExtEventSink {
     ) -> Result<(), ExtEventError> {
         let target = target.into();
         let payload = payload.into();
-        if let Some(handle) = self.handle.lock().unwrap().as_mut() {
-            handle.schedule_idle(EXT_EVENT_IDLE_TOKEN);
-        }
         self.queue.lock().map_err(|_| ExtEventError)?.push_back((
             selector.symbol(),
             payload,
             target,
         ));
+        if let Some(handle) = self.handle.lock().unwrap().as_mut() {
+            handle.schedule_idle(EXT_EVENT_IDLE_TOKEN);
+        }
         Ok(())
     }
 

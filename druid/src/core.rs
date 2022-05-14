@@ -153,6 +153,7 @@ pub struct WidgetState {
     /// The result of merging up children cursors. This gets cleared when merging state up (unlike
     /// cursor_change, which is persistent).
     pub(crate) cursor: Option<Cursor>,
+    pub(crate) cursor_from_child: bool,
 
     // Port -> Host
     pub(crate) sub_window_hosts: Vec<(WindowId, WidgetId)>,
@@ -288,7 +289,7 @@ impl<T, W: Widget<T>> WidgetPod<T, W> {
             data,
             env,
         ) {
-            ctx.widget_state.merge_up(&mut self.state);
+            ctx.widget_state.merge_up(&mut self.state, false);
         }
     }
 
@@ -599,7 +600,7 @@ impl<T: Data, W: Widget<T>> WidgetPod<T, W> {
             self.inner.lifecycle(&mut child_ctx, &size_event, data, env);
         }
 
-        ctx.widget_state.merge_up(child_ctx.widget_state);
+        ctx.widget_state.merge_up(child_ctx.widget_state, false);
         self.state.size = new_size;
         self.log_layout_issues(new_size);
 
@@ -871,7 +872,7 @@ impl<T: Data, W: Widget<T>> WidgetPod<T, W> {
 
         // Always merge even if not needed, because merging is idempotent and gives us simpler code.
         // Doing this conditionally only makes sense when there's a measurable performance boost.
-        ctx.widget_state.merge_up(&mut self.state);
+        ctx.widget_state.merge_up(&mut self.state, event.is_mouse());
     }
 
     /// Send notifications originating from this widget's children to this
@@ -1135,7 +1136,7 @@ impl<T: Data, W: Widget<T>> WidgetPod<T, W> {
             _ => (),
         }
 
-        ctx.widget_state.merge_up(&mut self.state);
+        ctx.widget_state.merge_up(&mut self.state, false);
     }
 
     /// Propagate a data update.
@@ -1199,7 +1200,7 @@ impl<T: Data, W: Widget<T>> WidgetPod<T, W> {
         self.env = Some(env.clone());
 
         self.state.request_update = false;
-        ctx.widget_state.merge_up(&mut self.state);
+        ctx.widget_state.merge_up(&mut self.state, false);
     }
 }
 
@@ -1254,6 +1255,7 @@ impl WidgetState {
             children_changed: false,
             cursor_change: CursorChange::Default,
             cursor: None,
+            cursor_from_child: false,
             sub_window_hosts: Vec::new(),
             is_explicitly_disabled_new: false,
             update_focus_chain: false,
@@ -1274,7 +1276,7 @@ impl WidgetState {
     /// This will also clear some requests in the child state.
     ///
     /// This method is idempotent and can be called multiple times.
-    fn merge_up(&mut self, child_state: &mut WidgetState) {
+    fn merge_up(&mut self, child_state: &mut WidgetState, is_mouse: bool) {
         let clip = self
             .layout_rect()
             .with_origin(Point::ORIGIN)
@@ -1293,6 +1295,7 @@ impl WidgetState {
         child_state.invalid.clear();
 
         self.needs_layout |= child_state.needs_layout;
+        child_state.needs_layout = false;
         self.needs_window_origin |= child_state.needs_window_origin;
         self.request_anim |= child_state.request_anim;
         self.children_disabled_changed |= child_state.children_disabled_changed;
@@ -1307,16 +1310,23 @@ impl WidgetState {
 
         // We reset `child_state.cursor` no matter what, so that on the every pass through the tree,
         // things will be recalculated just from `cursor_change`.
-        let child_cursor = child_state.take_cursor();
-        if let CursorChange::Override(cursor) = &self.cursor_change {
-            self.cursor = Some(cursor.clone());
-        } else if child_state.has_active || child_state.is_hot {
-            self.cursor = child_cursor;
-        }
-
-        if self.cursor.is_none() {
-            if let CursorChange::Set(cursor) = &self.cursor_change {
+        if is_mouse {
+            let child_cursor = child_state.take_cursor();
+            if let CursorChange::Override(cursor) = &self.cursor_change {
                 self.cursor = Some(cursor.clone());
+                self.cursor_from_child = false;
+            } else if (child_state.has_active || child_state.is_hot)
+                && (self.cursor.is_none() || !self.cursor_from_child)
+            {
+                self.cursor = child_cursor;
+                self.cursor_from_child = true;
+            }
+
+            if self.cursor.is_none() {
+                if let CursorChange::Set(cursor) = &self.cursor_change {
+                    self.cursor = Some(cursor.clone());
+                    self.cursor_from_child = false;
+                }
             }
         }
     }

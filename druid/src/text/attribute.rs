@@ -139,7 +139,7 @@ impl AttributeSpans {
         }
     }
 
-    pub(crate) fn to_piet_attrs(&self, env: &Env) -> Vec<(Range<usize>, PietAttr)> {
+    pub fn to_piet_attrs(&self, env: &Env) -> Vec<(Range<usize>, PietAttr)> {
         let mut items = Vec::new();
         for Span { range, attr } in self.font_descriptor.iter() {
             let font = attr.resolve(env);
