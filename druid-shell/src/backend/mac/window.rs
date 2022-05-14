@@ -263,6 +263,9 @@ impl WindowBuilder {
 
             if self.show_titlebar {
                 style_mask |= NSWindowStyleMask::NSTitledWindowMask;
+            } else {
+                style_mask |= NSWindowStyleMask::NSFullSizeContentViewWindowMask
+                    | NSWindowStyleMask::NSTitledWindowMask;
             }
 
             if self.resizable {
@@ -282,6 +285,10 @@ impl WindowBuilder {
                 NSBackingStoreBuffered,
                 NO,
             );
+            if !self.show_titlebar {
+                window.setTitlebarAppearsTransparent_(YES);
+                window.setTitleVisibility_(appkit::NSWindowTitleVisibility::NSWindowTitleHidden);
+            }
 
             if let Some(min_size) = self.min_size {
                 let size = NSSize::new(min_size.width, min_size.height);
