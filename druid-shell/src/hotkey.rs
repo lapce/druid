@@ -245,3 +245,32 @@ impl From<SysMods> for RawMods {
         }
     }
 }
+
+impl From<Modifiers> for Option<RawMods> {
+    fn from(src: Modifiers) -> Option<RawMods> {
+        Some(src.into())
+    }
+}
+
+impl From<Modifiers> for RawMods {
+    fn from(src: Modifiers) -> RawMods {
+        match (src.alt(), src.ctrl(), src.meta(), src.shift()) {
+            (true, true, true, true) => RawMods::AltCtrlMetaShift,
+            (true, true, true, false) => RawMods::AltCtrlMeta,
+            (true, true, false, true) => RawMods::AltCtrlShift,
+            (true, true, false, false) => RawMods::AltCtrl,
+            (true, false, true, true) => RawMods::AltMetaShift,
+            (true, false, true, false) => RawMods::AltMeta,
+            (true, false, false, true) => RawMods::AltShift,
+            (true, false, false, false) => RawMods::Alt,
+            (false, true, true, true) => RawMods::CtrlMetaShift,
+            (false, true, true, false) => RawMods::CtrlMeta,
+            (false, true, false, true) => RawMods::CtrlShift,
+            (false, true, false, false) => RawMods::Ctrl,
+            (false, false, true, true) => RawMods::MetaShift,
+            (false, false, true, false) => RawMods::Meta,
+            (false, false, false, true) => RawMods::Shift,
+            (false, false, false, false) => RawMods::None,
+        }
+    }
+}
