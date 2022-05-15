@@ -527,6 +527,10 @@ lazy_static! {
             sel!(windowWillClose:),
             window_will_close as extern "C" fn(&mut Object, Sel, id),
         );
+        decl.add_method(
+            sel!(windowDidMove:),
+            window_did_move as extern "C" fn(&mut Object, Sel, id),
+        );
 
         // methods for NSTextInputClient
         decl.add_method(sel!(hasMarkedText), super::text_input::has_marked_text as extern fn(&mut Object, Sel) -> BOOL);
@@ -929,6 +933,11 @@ extern "C" fn draw_rect(this: &mut Object, _: Sel, dirtyRect: NSRect) {
 
         let view_state: *mut c_void = *this.get_ivar("viewState");
         let view_state = &mut *(view_state as *mut ViewState);
+
+        let gl_context = (*view_state).gl_context.context.load();
+        gl_context.update();
+        gl_context.makeCurrentContext();
+
         let renderer = &mut (*view_state).renderer;
         let mut piet_ctx = Piet::new(renderer);
 
@@ -1090,6 +1099,18 @@ extern "C" fn window_will_close(this: &mut Object, _: Sel, _notification: id) {
         let view_state: *mut c_void = *this.get_ivar("viewState");
         let view_state = &mut *(view_state as *mut ViewState);
         (*view_state).handler.destroy();
+    }
+}
+
+extern "C" fn window_did_move(this: &mut Object, _: Sel, _notification: id) {
+    unsafe {
+        let view_state: *mut c_void = *this.get_ivar("viewState");
+        let view_state = &mut *(view_state as *mut ViewState);
+
+        let rect = NSWindow::frame(*(*view_state).nswindow.load());
+        (*view_state)
+            .handler
+            .position(Point::new(rect.origin.x, rect.origin.y));
     }
 }
 

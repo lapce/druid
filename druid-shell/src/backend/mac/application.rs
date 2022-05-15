@@ -86,11 +86,11 @@ impl Application {
                 unsafe {
                     // We want to queue up the destruction of all our windows.
                     // Failure to do so will lead to resource leaks.
-                    let windows: id = msg_send![self.ns_app, windows];
-                    for i in 0..windows.count() {
-                        let window: id = windows.objectAtIndex(i);
-                        let () = msg_send![window, performSelectorOnMainThread: sel!(close) withObject: nil waitUntilDone: NO];
-                    }
+                    // let windows: id = msg_send![self.ns_app, windows];
+                    // for i in 0..windows.count() {
+                    //     let window: id = windows.objectAtIndex(i);
+                    //     let () = msg_send![window, performSelectorOnMainThread: sel!(close) withObject: nil waitUntilDone: NO];
+                    // }
                     // Stop sets a stop request flag in the OS.
                     // The run loop is stopped after dealing with events.
                     let () = msg_send![self.ns_app, stop: nil];
@@ -152,6 +152,12 @@ impl DelegateState {
             inner.command(command)
         }
     }
+
+    fn will_terminate(&mut self) {
+        if let Some(inner) = self.handler.as_mut() {
+            inner.will_terminate()
+        }
+    }
 }
 
 struct AppDelegate(*const Class);
@@ -172,6 +178,11 @@ lazy_static! {
             sel!(handleMenuItem:),
             handle_menu_item as extern "C" fn(&mut Object, Sel, id),
         );
+        decl.add_method(
+            sel!(applicationWillTerminate:),
+            will_terminate as extern "C" fn(&mut Object, Sel, id),
+        );
+
         AppDelegate(decl.register())
     };
 }
@@ -193,5 +204,13 @@ extern "C" fn handle_menu_item(this: &mut Object, _: Sel, item: id) {
         let inner: *mut c_void = *this.get_ivar(APP_HANDLER_IVAR);
         let inner = &mut *(inner as *mut DelegateState);
         (*inner).command(tag as u32);
+    }
+}
+
+extern "C" fn will_terminate(this: &mut Object, _: Sel, item: id) {
+    unsafe {
+        let inner: *mut c_void = *this.get_ivar(APP_HANDLER_IVAR);
+        let inner = &mut *(inner as *mut DelegateState);
+        (*inner).will_terminate();
     }
 }

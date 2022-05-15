@@ -148,14 +148,9 @@ impl<T: Data> AppLauncher<T> {
     }
 
     /// Create a new `AppLauncher` with the provided window.
-    pub fn with_window(self, window: WindowDesc<T>) -> Self {
-        AppLauncher {
-            windows: vec![window],
-            env_setup: None,
-            l10n_resources: None,
-            delegate: None,
-            ext_event_host: ExtEventHost::new(),
-        }
+    pub fn with_window(mut self, window: WindowDesc<T>) -> Self {
+        self.windows.push(window);
+        self
     }
 
     /// Provide an optional closure that will be given mutable access to

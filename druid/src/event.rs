@@ -16,6 +16,7 @@
 
 use crate::kurbo::{Rect, Shape, Size, Vec2};
 
+use druid_shell::kurbo::Point;
 use druid_shell::{Clipboard, KeyEvent, TimerToken};
 
 use crate::mouse::MouseEvent;
@@ -50,6 +51,10 @@ use crate::{Command, Notification, WidgetId};
 /// [`WidgetPod`]: struct.WidgetPod.html
 #[derive(Debug, Clone)]
 pub enum Event {
+    /// Sent to Delegate that the Application will terminate
+    ///
+    /// This is a good place to do cleanup
+    ApplicationWillTerminate,
     /// Sent to all widgets in a given window when that window is first instantiated.
     ///
     /// This should always be the first `Event` received, although widgets will
@@ -81,6 +86,8 @@ pub enum Event {
     /// in the WindowPod, but after that it might be considered better
     /// to just handle it in `layout`.
     WindowSize(Size),
+    /// Called on the root widget when the window position changes.
+    WindowPosition(Point),
     /// Called when a mouse button is pressed.
     MouseDown(MouseEvent),
     /// Called when a mouse button is released.
@@ -428,10 +435,12 @@ impl Event {
     /// [`LifeCycle::should_propagate_to_hidden`]: LifeCycle::should_propagate_to_hidden
     pub fn should_propagate_to_hidden(&self) -> bool {
         match self {
-            Event::WindowConnected
+            Event::ApplicationWillTerminate
+            | Event::WindowConnected
             | Event::WindowCloseRequested
             | Event::WindowDisconnected
             | Event::WindowSize(_)
+            | Event::WindowPosition(_)
             | Event::Timer(_)
             | Event::AnimFrame(_)
             | Event::Command(_)

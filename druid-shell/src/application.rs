@@ -40,6 +40,8 @@ pub trait AppHandler {
     /// Called when a menu item is selected.
     #[allow(unused_variables)]
     fn command(&mut self, id: u32) {}
+
+    fn will_terminate(&mut self) {}
 }
 
 /// The top level application object.

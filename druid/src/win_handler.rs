@@ -38,6 +38,7 @@ use crate::{
 
 use crate::app::{PendingWindow, WindowConfig};
 use crate::command::sys as sys_cmd;
+use druid_shell::kurbo::Point;
 use druid_shell::WindowBuilder;
 
 pub(crate) const RUN_COMMANDS_TOKEN: IdleToken = IdleToken::new(1);
@@ -875,7 +876,14 @@ impl<T: Data> AppState<T> {
         }
     }
 
+    fn application_will_terminate(&self) {
+        self.inner
+            .borrow_mut()
+            .delegate_event(WindowId::next(), Event::ApplicationWillTerminate);
+    }
+
     fn quit(&self) {
+        self.application_will_terminate();
         self.inner.borrow().app.quit()
     }
 
@@ -927,6 +935,10 @@ impl<T: Data> crate::shell::AppHandler for AppHandler<T> {
     fn command(&mut self, id: u32) {
         self.app_state.handle_system_cmd(id, None)
     }
+
+    fn will_terminate(&mut self) {
+        self.app_state.application_will_terminate();
+    }
 }
 
 impl<T: Data> WinHandler for DruidHandler<T> {
@@ -948,6 +960,11 @@ impl<T: Data> WinHandler for DruidHandler<T> {
 
     fn size(&mut self, size: Size) {
         let event = Event::WindowSize(size);
+        self.app_state.do_window_event(event, self.window_id);
+    }
+
+    fn position(&mut self, point: Point) {
+        let event = Event::WindowPosition(point);
         self.app_state.do_window_event(event, self.window_id);
     }
 

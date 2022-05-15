@@ -724,7 +724,9 @@ impl<T: Data, W: Widget<T>> WidgetPod<T, W> {
                     }
                 }
             },
-            Event::WindowConnected | Event::WindowCloseRequested => true,
+            Event::ApplicationWillTerminate
+            | Event::WindowConnected
+            | Event::WindowCloseRequested => true,
             Event::WindowDisconnected => {
                 for (window_id, _) in &self.state.sub_window_hosts {
                     ctx.submit_command(CLOSE_WINDOW.to(*window_id))
@@ -735,6 +737,7 @@ impl<T: Data, W: Widget<T>> WidgetPod<T, W> {
                 self.state.needs_layout = true;
                 ctx.is_root
             }
+            Event::WindowPosition(_) => ctx.is_root,
             Event::MouseDown(mouse_event) => {
                 WidgetPod::set_hot_state(
                     &mut self.inner,
