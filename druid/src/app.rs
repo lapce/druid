@@ -267,6 +267,7 @@ impl<T: Data> AppLauncher<T> {
         for desc in self.windows {
             let window = desc.build_native(&mut state)?;
             window.show();
+            window.bring_to_front_and_focus();
         }
 
         let handler = AppHandler::new(state);
