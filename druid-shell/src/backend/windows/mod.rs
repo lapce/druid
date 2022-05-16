@@ -20,6 +20,7 @@ pub mod clipboard;
 pub mod dcomp;
 pub mod dialog;
 pub mod error;
+mod gl;
 mod keyboard;
 pub mod menu;
 pub mod paint;
@@ -46,7 +47,6 @@ pub mod window;
 // Basically, go from HwndRenderTarget or DxgiSurfaceRenderTarget (2d or 3d) to a Device Context.
 // Go back up for particular needs.
 
-use piet_common::d2d::DeviceContext;
 use std::fmt::{Debug, Display, Formatter};
 use winapi::shared::winerror::HRESULT;
 use winapi::um::d2d1::ID2D1RenderTarget;
@@ -66,17 +66,6 @@ impl DxgiSurfaceRenderTarget {
         DxgiSurfaceRenderTarget {
             ptr: ComPtr::from_raw(raw),
         }
-    }
-
-    /// cast to DeviceContext
-    ///
-    /// # Safety
-    /// TODO
-    pub unsafe fn as_device_context(&self) -> Option<DeviceContext> {
-        self.ptr
-            .cast()
-            .ok()
-            .map(|com_ptr| DeviceContext::new(com_ptr))
     }
 }
 

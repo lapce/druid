@@ -30,8 +30,6 @@ use winapi::um::d2d1::*;
 use winapi::um::dcommon::*;
 use winapi::Interface;
 
-use piet_common::d2d::D2DFactory;
-
 use crate::backend::windows::DxgiSurfaceRenderTarget;
 use crate::scale::Scale;
 

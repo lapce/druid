@@ -24,6 +24,7 @@ use std::rc::{Rc, Weak};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use piet_wgpu::WgpuRenderer;
 use scopeguard::defer;
 use tracing::{debug, error, warn};
 use winapi::ctypes::{c_int, c_void};
@@ -49,9 +50,7 @@ use wio::com::ComPtr;
 #[cfg(feature = "raw-win-handle")]
 use raw_window_handle::{windows::WindowsHandle, HasRawWindowHandle, RawWindowHandle};
 
-use piet_common::d2d::{D2DFactory, DeviceContext};
-use piet_common::dwrite::DwriteFactory;
-
+use crate::gl::{GlAttributes, PixelFormatRequirements};
 use crate::kurbo::{Insets, Point, Rect, Size, Vec2};
 use crate::piet::{Piet, PietText, RenderContext};
 
@@ -60,6 +59,7 @@ use super::application::Application;
 use super::dcomp::D3D11Device;
 use super::dialog::get_file_dialog_path;
 use super::error::Error;
+use super::gl::Context;
 use super::keyboard::{self, KeyboardState};
 use super::menu::Menu;
 use super::paint;
@@ -163,9 +163,8 @@ enum DeferredOp {
     ReleaseMouseCapture,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct WindowHandle {
-    text: PietText,
     state: Weak<WindowState>,
 }
 
@@ -264,7 +263,6 @@ trait WndProc {
 struct MyWndProc {
     app: Application,
     handle: RefCell<WindowHandle>,
-    d2d_factory: D2DFactory,
     text: PietText,
     state: RefCell<Option<WndState>>,
     present_strategy: PresentStrategy,
@@ -273,7 +271,7 @@ struct MyWndProc {
 /// The mutable state of the window.
 struct WndState {
     handler: Box<dyn WinHandler>,
-    render_target: Option<DeviceContext>,
+    renderer: Option<WgpuRenderer>,
     dxgi_state: Option<DxgiState>,
     min_size: Option<Size>,
     keyboard_state: KeyboardState,
@@ -442,25 +440,13 @@ impl WndState {
     }
 
     // Renders but does not present.
-    fn render(&mut self, d2d: &D2DFactory, text: &PietText, invalid: &Region) {
-        let rt = self.render_target.as_mut().unwrap();
+    fn render(&mut self, invalid: &Region) {
+        let renderer = self.renderer.as_mut().unwrap();
+        let mut piet_ctx = Piet::new(renderer);
 
-        rt.begin_draw();
-        {
-            let mut piet_ctx = Piet::new(d2d, text.clone(), rt);
-
-            // The documentation on DXGI_PRESENT_PARAMETERS says we "must not update any
-            // pixel outside of the dirty rectangles."
-            piet_ctx.clip(invalid.to_bez_path());
-            self.handler.paint(&mut piet_ctx, invalid);
-            if let Err(e) = piet_ctx.finish() {
-                error!("piet error on render: {:?}", e);
-            }
-        }
-        // Maybe should deal with lost device here...
-        let res = rt.end_draw();
-        if let Err(e) = res {
-            error!("EndDraw error: {:?}", e);
+        self.handler.paint(&mut piet_ctx, invalid);
+        if let Err(e) = piet_ctx.finish() {
+            error!("piet error on render: {:?}", e);
         }
     }
 
@@ -737,6 +723,19 @@ impl WndProc for MyWndProc {
 
                 if let Some(state) = self.handle.borrow().state.upgrade() {
                     state.hwnd.set(hwnd);
+                    unsafe {
+                        let gl_context = Context::new(
+                            &PixelFormatRequirements::default(),
+                            &GlAttributes::default(),
+                            hwnd,
+                        )
+                        .unwrap();
+                        gl_context.make_current();
+                        let renderer =
+                            piet_wgpu::WgpuRenderer::new(|addr| gl_context.get_proc_address(addr))
+                                .unwrap();
+                        self.state.borrow_mut().as_mut().unwrap().renderer = Some(renderer);
+                    }
                 }
                 if let Some(state) = self.state.borrow_mut().as_mut() {
                     let dxgi_state = unsafe {
@@ -1348,13 +1347,9 @@ impl WindowBuilder {
     pub fn build(self) -> Result<WindowHandle, Error> {
         unsafe {
             let class_name = super::util::CLASS_NAME.to_wide();
-            let dwrite_factory = DwriteFactory::new().unwrap();
-            let fonts = self.app.fonts.clone();
-            let text = PietText::new_with_shared_fonts(dwrite_factory, Some(fonts));
             let wndproc = MyWndProc {
                 app: self.app.clone(),
                 handle: Default::default(),
-                d2d_factory: D2DFactory::new().unwrap(),
                 text: text.clone(),
                 state: RefCell::new(None),
                 present_strategy: self.present_strategy,
@@ -1441,13 +1436,12 @@ impl WindowBuilder {
             };
             let win = Rc::new(window);
             let handle = WindowHandle {
-                text,
                 state: Rc::downgrade(&win),
             };
 
             let state = WndState {
                 handler: self.handler.unwrap(),
-                render_target: None,
+                renderer: None,
                 dxgi_state: None,
                 min_size: self.min_size,
                 keyboard_state: KeyboardState::new(),
