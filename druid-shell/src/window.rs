@@ -416,10 +416,6 @@ impl WindowHandle {
     pub fn get_scale(&self) -> Result<Scale, Error> {
         self.0.get_scale().map_err(Into::into)
     }
-
-    pub fn make_current(&self) {
-        self.0.make_current();
-    }
 }
 
 #[cfg(feature = "raw-win-handle")]

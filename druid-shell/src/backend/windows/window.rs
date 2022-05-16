@@ -62,7 +62,6 @@ use super::error::Error;
 use super::gl::Context;
 use super::keyboard::{self, KeyboardState};
 use super::menu::Menu;
-use super::paint;
 use super::timers::TimerSlots;
 use super::util::{self, as_result, FromWide, ToWide, OPTIONAL_FUNCTIONS};
 
@@ -263,7 +262,6 @@ trait WndProc {
 struct MyWndProc {
     app: Application,
     handle: RefCell<WindowHandle>,
-    text: PietText,
     state: RefCell<Option<WndState>>,
     present_strategy: PresentStrategy,
 }
@@ -272,6 +270,7 @@ struct MyWndProc {
 struct WndState {
     handler: Box<dyn WinHandler>,
     renderer: Option<WgpuRenderer>,
+    gl_context: Option<Context>,
     dxgi_state: Option<DxgiState>,
     min_size: Option<Size>,
     keyboard_state: KeyboardState,
@@ -425,20 +424,6 @@ fn set_style(hwnd: HWND, resizable: bool, titlebar: bool) {
 }
 
 impl WndState {
-    fn rebuild_render_target(&mut self, d2d: &D2DFactory, scale: Scale) -> Result<(), Error> {
-        unsafe {
-            let swap_chain = self.dxgi_state.as_ref().unwrap().swap_chain;
-            match paint::create_render_target_dxgi(d2d, swap_chain, scale, self.transparent) {
-                Ok(rt) => {
-                    self.render_target =
-                        Some(rt.as_device_context().expect("TODO remove this expect"));
-                    Ok(())
-                }
-                Err(e) => Err(e),
-            }
-        }
-    }
-
     // Renders but does not present.
     fn render(&mut self, invalid: &Region) {
         let renderer = self.renderer.as_mut().unwrap();
@@ -448,6 +433,7 @@ impl WndState {
         if let Err(e) = piet_ctx.finish() {
             error!("piet error on render: {:?}", e);
         }
+        self.gl_context.as_mut().unwrap().swap_buffers();
     }
 
     fn enter_mouse_capture(&mut self, hwnd: HWND, button: MouseButton) {
@@ -734,25 +720,14 @@ impl WndProc for MyWndProc {
                         let renderer =
                             piet_wgpu::WgpuRenderer::new(|addr| gl_context.get_proc_address(addr))
                                 .unwrap();
+                        renderer.set_scale(scale_factor);
                         self.state.borrow_mut().as_mut().unwrap().renderer = Some(renderer);
+                        self.state.borrow_mut().as_mut().unwrap().gl_context = Some(gl_context);
                     }
                 }
                 if let Some(state) = self.state.borrow_mut().as_mut() {
-                    let dxgi_state = unsafe {
-                        create_dxgi_state(self.present_strategy, hwnd, self.is_transparent())
-                            .unwrap_or_else(|e| {
-                                error!("Creating swapchain failed: {:?}", e);
-                                None
-                            })
-                    };
-                    state.dxgi_state = dxgi_state;
-
                     let handle = self.handle.borrow().to_owned();
                     state.handler.connect(&handle.into());
-
-                    if let Err(e) = state.rebuild_render_target(&self.d2d_factory, scale) {
-                        error!("error building render target: {}", e);
-                    }
                 }
                 Some(0)
             }
@@ -822,7 +797,7 @@ impl WndProc for MyWndProc {
                     let invalid = self.take_invalid();
                     if !invalid.rects().is_empty() {
                         s.handler.rebuild_resources();
-                        s.render(&self.d2d_factory, &self.text, &invalid);
+                        s.render(&invalid);
                         if let Some(ref mut ds) = s.dxgi_state {
                             let mut dirty_rects = util::region_to_rectis(&invalid, self.scale());
                             let params = DXGI_PRESENT_PARAMETERS {
@@ -842,6 +817,13 @@ impl WndProc for MyWndProc {
                 let y = LOWORD(wparam as u32) as f64 / SCALE_TARGET_DPI;
                 let scale = Scale::new(x, y);
                 self.set_scale(scale);
+                self.state
+                    .borrow_mut()
+                    .unwrap()
+                    .renderer
+                    .as_mut()
+                    .unwrap()
+                    .set_scale(x);
                 let rect: *mut RECT = lparam as *mut RECT;
                 SetWindowPos(
                     hwnd,
@@ -944,37 +926,16 @@ impl WndProc for MyWndProc {
                     let scale = self.scale();
                     let area = ScaledArea::from_px((width as f64, height as f64), scale);
                     let size_dp = area.size_dp();
+                    let renderer = self.state.borrow_mut().unwrap().renderer.as_mut().unwrap();
+                    renderer.set_scale(scale.x());
+                    renderer.set_size(size_dp * scale.x());
                     self.set_area(area);
                     s.handler.size(size_dp);
-                    let res;
-                    {
-                        s.render_target = None;
-                        res = (*s.dxgi_state.as_mut().unwrap().swap_chain).ResizeBuffers(
-                            0,
-                            width,
-                            height,
-                            DXGI_FORMAT_UNKNOWN,
-                            0,
-                        );
-                    }
-                    if SUCCEEDED(res) {
-                        if let Err(e) = s.rebuild_render_target(&self.d2d_factory, scale) {
-                            error!("error building render target: {}", e);
-                        }
-                        s.render(&self.d2d_factory, &self.text, &size_dp.to_rect().into());
-                        let present_after = match self.present_strategy {
-                            PresentStrategy::Sequential => 1,
-                            _ => 0,
-                        };
-                        if let Some(ref mut dxgi_state) = s.dxgi_state {
-                            (*dxgi_state.swap_chain).Present(present_after, 0);
-                        }
-                        ValidateRect(hwnd, null_mut());
-                    } else {
-                        error!("ResizeBuffers failed: 0x{:x}", res);
-                    }
-                })
-                .map(|_| 0)
+
+                    s.render(&size_dp.to_rect().into());
+                    ValidateRect(hwnd, null_mut());
+                });
+                Some(0)
             },
             WM_COMMAND => {
                 self.with_wnd_state(|s| s.handler.command(LOWORD(wparam as u32) as u32));
@@ -1350,7 +1311,6 @@ impl WindowBuilder {
             let wndproc = MyWndProc {
                 app: self.app.clone(),
                 handle: Default::default(),
-                text: text.clone(),
                 state: RefCell::new(None),
                 present_strategy: self.present_strategy,
             };
@@ -1442,6 +1402,7 @@ impl WindowBuilder {
             let state = WndState {
                 handler: self.handler.unwrap(),
                 renderer: None,
+                gl_context: None,
                 dxgi_state: None,
                 min_size: self.min_size,
                 keyboard_state: KeyboardState::new(),
@@ -2263,7 +2224,6 @@ impl Default for WindowHandle {
     fn default() -> Self {
         WindowHandle {
             state: Default::default(),
-            text: PietText::new_with_shared_fonts(DwriteFactory::new().unwrap(), None),
         }
     }
 }
