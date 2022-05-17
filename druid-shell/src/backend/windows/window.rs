@@ -274,7 +274,6 @@ struct WndState {
     handler: Box<dyn WinHandler>,
     renderer: Option<WgpuRenderer>,
     gl_context: Option<Context>,
-    dxgi_state: Option<DxgiState>,
     min_size: Option<Size>,
     keyboard_state: KeyboardState,
     // Stores a set of all mouse buttons that are currently holding mouse
@@ -811,16 +810,6 @@ impl WndProc for MyWndProc {
                     if !invalid.rects().is_empty() {
                         s.handler.rebuild_resources();
                         s.render(&invalid);
-                        if let Some(ref mut ds) = s.dxgi_state {
-                            let mut dirty_rects = util::region_to_rectis(&invalid, self.scale());
-                            let params = DXGI_PRESENT_PARAMETERS {
-                                DirtyRectsCount: dirty_rects.len() as u32,
-                                pDirtyRects: dirty_rects.as_mut_ptr(),
-                                pScrollRect: null_mut(),
-                                pScrollOffset: null_mut(),
-                            };
-                            (*ds.swap_chain).Present1(1, 0, &params);
-                        }
                     }
                 });
                 Some(0)
@@ -947,7 +936,7 @@ impl WndProc for MyWndProc {
                     self.set_area(area);
                     s.handler.size(size_dp);
 
-                    s.render(&size_dp.to_rect().into());
+                    // s.render(&size_dp.to_rect().into());
                     ValidateRect(hwnd, null_mut());
                 });
                 Some(0)
@@ -1419,7 +1408,6 @@ impl WindowBuilder {
                 handler: self.handler.unwrap(),
                 renderer: None,
                 gl_context: None,
-                dxgi_state: None,
                 min_size: self.min_size,
                 keyboard_state: KeyboardState::new(),
                 captured_mouse_buttons: MouseButtons::new(),
@@ -1546,121 +1534,6 @@ unsafe fn choose_adapter(factory: *mut IDXGIFactory2) -> *mut IDXGIAdapter {
         i += 1;
     }
     best_adapter
-}
-
-unsafe fn create_dxgi_state(
-    present_strategy: PresentStrategy,
-    hwnd: HWND,
-    transparent: bool,
-) -> Result<Option<DxgiState>, Error> {
-    let mut factory: *mut IDXGIFactory2 = null_mut();
-    as_result(CreateDXGIFactory1(
-        &IID_IDXGIFactory2,
-        &mut factory as *mut *mut IDXGIFactory2 as *mut *mut c_void,
-    ))?;
-    debug!("dxgi factory pointer = {:?}", factory);
-    let adapter = choose_adapter(factory);
-    debug!("adapter = {:?}", adapter);
-
-    let mut d3d11_device = D3D11Device::new_simple()?;
-
-    let (swap_effect, bufs) = match present_strategy {
-        PresentStrategy::Sequential => (DXGI_SWAP_EFFECT_SEQUENTIAL, 1),
-        PresentStrategy::Flip | PresentStrategy::FlipRedirect => {
-            (DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL, 2)
-        }
-    };
-
-    let desc = DXGI_SWAP_CHAIN_DESC1 {
-        Width: 1024,
-        Height: 768,
-        Format: DXGI_FORMAT_B8G8R8A8_UNORM,
-        Stereo: FALSE,
-        SampleDesc: DXGI_SAMPLE_DESC {
-            Count: 1,
-            Quality: 0,
-        },
-        BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
-        BufferCount: bufs,
-        Scaling: DXGI_SCALING_STRETCH,
-        SwapEffect: swap_effect,
-        AlphaMode: if transparent {
-            DXGI_ALPHA_MODE_PREMULTIPLIED
-        } else {
-            DXGI_ALPHA_MODE_IGNORE
-        },
-        Flags: 0,
-    };
-    let mut swap_chain: *mut IDXGISwapChain1 = null_mut();
-    let swap_chain_res = if transparent {
-        (*factory).CreateSwapChainForComposition(
-            d3d11_device.raw_ptr() as *mut IUnknown,
-            &desc,
-            null_mut(),
-            &mut swap_chain,
-        )
-    } else {
-        (*factory).CreateSwapChainForHwnd(
-            d3d11_device.raw_ptr() as *mut IUnknown,
-            hwnd,
-            &desc,
-            null_mut(),
-            null_mut(),
-            &mut swap_chain,
-        )
-    };
-    debug!(
-        "swap chain res = 0x{:x}, pointer = {:?}",
-        swap_chain_res, swap_chain
-    );
-
-    let (composition_device, composition_target, composition_visual) = if transparent {
-        // This behavior is only supported on windows 8 and newer where
-        // composition is available
-
-        // Following resources are created according to this tutorial:
-        // https://docs.microsoft.com/en-us/archive/msdn-magazine/2014/june/windows-with-c-high-performance-window-layering-using-the-windows-composition-engine
-        let DCompositionCreateDevice = OPTIONAL_FUNCTIONS.DCompositionCreateDevice.unwrap();
-
-        // Create IDCompositionDevice
-        let mut ptr: *mut c_void = null_mut();
-        DCompositionCreateDevice(
-            d3d11_device.raw_ptr() as *mut IDXGIDevice,
-            &IDCompositionDevice::uuidof(),
-            &mut ptr,
-        );
-        let composition_device = ComPtr::<IDCompositionDevice>::from_raw(ptr as _);
-
-        // Create IDCompositionTarget for the window
-        let mut ptr: *mut IDCompositionTarget = null_mut();
-        composition_device.CreateTargetForHwnd(hwnd as _, 1, &mut ptr);
-        let composition_target = ComPtr::from_raw(ptr);
-
-        // Create IDCompositionVisual and assign to swap chain
-        let mut ptr: *mut IDCompositionVisual = null_mut();
-        composition_device.CreateVisual(&mut ptr);
-        let composition_visual = ComPtr::from_raw(ptr);
-        composition_visual.SetContent(swap_chain as *mut IUnknown);
-
-        // Set the root as composition target and commit
-        composition_target.SetRoot(composition_visual.as_raw());
-        composition_device.Commit();
-
-        (
-            Some(composition_device),
-            Some(composition_target),
-            Some(composition_visual),
-        )
-    } else {
-        (None, None, None)
-    };
-
-    Ok(Some(DxgiState {
-        swap_chain,
-        composition_device,
-        composition_target,
-        composition_visual,
-    }))
 }
 
 #[cfg(target_arch = "x86_64")]
