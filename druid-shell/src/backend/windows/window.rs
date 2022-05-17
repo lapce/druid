@@ -255,6 +255,8 @@ trait WndProc {
 
     fn window_proc(&self, hwnd: HWND, msg: UINT, wparam: WPARAM, lparam: LPARAM)
         -> Option<LRESULT>;
+
+    fn text(&self) -> PietText;
 }
 
 // State and logic for the winapi window procedure entry point. Note that this level
@@ -263,6 +265,7 @@ struct MyWndProc {
     app: Application,
     handle: RefCell<WindowHandle>,
     state: RefCell<Option<WndState>>,
+    text: RefCell<Option<PietText>>,
     present_strategy: PresentStrategy,
 }
 
@@ -426,6 +429,11 @@ fn set_style(hwnd: HWND, resizable: bool, titlebar: bool) {
 impl WndState {
     // Renders but does not present.
     fn render(&mut self, invalid: &Region) {
+        let gl_context = self.gl_context.as_mut().unwrap();
+        unsafe {
+            gl_context.make_current();
+        }
+
         let renderer = self.renderer.as_mut().unwrap();
         let mut piet_ctx = Piet::new(renderer);
 
@@ -433,7 +441,7 @@ impl WndState {
         if let Err(e) = piet_ctx.finish() {
             error!("piet error on render: {:?}", e);
         }
-        self.gl_context.as_mut().unwrap().swap_buffers();
+        gl_context.swap_buffers();
     }
 
     fn enter_mouse_capture(&mut self, hwnd: HWND, button: MouseButton) {
@@ -677,6 +685,10 @@ impl WndProc for MyWndProc {
         self.app.remove_window(hwnd);
     }
 
+    fn text(&self) -> PietText {
+        self.text.borrow().clone().unwrap()
+    }
+
     #[allow(clippy::cognitive_complexity)]
     fn window_proc(
         &self,
@@ -717,10 +729,11 @@ impl WndProc for MyWndProc {
                         )
                         .unwrap();
                         gl_context.make_current();
-                        let renderer =
+                        let mut renderer =
                             piet_wgpu::WgpuRenderer::new(|addr| gl_context.get_proc_address(addr))
                                 .unwrap();
                         renderer.set_scale(scale_factor);
+                        *self.text.borrow_mut() = Some(renderer.text());
                         self.state.borrow_mut().as_mut().unwrap().renderer = Some(renderer);
                         self.state.borrow_mut().as_mut().unwrap().gl_context = Some(gl_context);
                     }
@@ -819,6 +832,7 @@ impl WndProc for MyWndProc {
                 self.set_scale(scale);
                 self.state
                     .borrow_mut()
+                    .as_mut()
                     .unwrap()
                     .renderer
                     .as_mut()
@@ -926,7 +940,8 @@ impl WndProc for MyWndProc {
                     let scale = self.scale();
                     let area = ScaledArea::from_px((width as f64, height as f64), scale);
                     let size_dp = area.size_dp();
-                    let renderer = self.state.borrow_mut().unwrap().renderer.as_mut().unwrap();
+
+                    let renderer = s.renderer.as_mut().unwrap();
                     renderer.set_scale(scale.x());
                     renderer.set_size(size_dp * scale.x());
                     self.set_area(area);
@@ -1311,6 +1326,7 @@ impl WindowBuilder {
             let wndproc = MyWndProc {
                 app: self.app.clone(),
                 handle: Default::default(),
+                text: Default::default(),
                 state: RefCell::new(None),
                 present_strategy: self.present_strategy,
             };
@@ -2004,7 +2020,7 @@ impl WindowHandle {
     }
 
     pub fn text(&self) -> PietText {
-        self.text.clone()
+        self.state.upgrade().unwrap().wndproc.text()
     }
 
     pub fn add_text_field(&self) -> TextFieldToken {

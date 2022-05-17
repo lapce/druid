@@ -426,8 +426,6 @@ unsafe fn create_context(
     _: HWND,
     hdc: HDC,
 ) -> Result<ContextWrapper, Error> {
-    let share;
-
     if let Some((extra_functions, _pf_reqs, opengl, extensions)) = extra {
         if extensions
             .split(' ')
@@ -572,7 +570,7 @@ unsafe fn create_context(
 
             let ctx = extra_functions.CreateContextAttribsARB(
                 hdc as *const raw::c_void,
-                share as *const raw::c_void,
+                std::ptr::null_mut() as *const raw::c_void,
                 attributes.as_ptr(),
             );
 
@@ -586,8 +584,6 @@ unsafe fn create_context(
                 return Ok(ContextWrapper(ctx as HGLRC));
             }
         }
-    } else {
-        share = std::ptr::null_mut();
     }
 
     let ctx = glutin_wgl_sys::wgl::CreateContext(hdc as *const raw::c_void);
