@@ -17,6 +17,7 @@
 
 use druid::commands::CLOSE_WINDOW;
 use druid::lens::Unit;
+use druid::piet::{TextLayout, TextLayoutBuilder};
 use druid::widget::{
     Align, Button, Checkbox, Controller, ControllerHost, EnvScope, Flex, Label, TextBox,
 };
@@ -28,7 +29,6 @@ use druid::{
 use druid_shell::piet::Text;
 use druid_shell::{Screen, WindowLevel};
 use instant::{Duration, Instant};
-use piet_common::{TextLayout, TextLayoutBuilder};
 
 const VERTICAL_WIDGET_SPACING: f64 = 20.0;
 const TEXT_BOX_WIDTH: f64 = 200.0;
@@ -62,7 +62,8 @@ pub fn main() {
     };
 
     // start the application
-    AppLauncher::with_window(main_window)
+    AppLauncher::new()
+        .with_window(main_window)
         .log_to_console()
         .launch(initial_state)
         .expect("Failed to launch application");

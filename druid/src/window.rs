@@ -395,13 +395,14 @@ impl<T: Data> Window<T> {
     }
 
     pub(crate) fn invalidate_and_finalize(&mut self) {
-        if self.needs_layout {
-            self.handle.invalidate();
-        } else {
-            for rect in self.invalid.rects() {
-                self.handle.invalidate_rect(*rect);
-            }
-        }
+        // if self.needs_layout {
+        //     self.handle.invalidate();
+        // } else {
+        //     for rect in self.invalid.rects() {
+        //         self.handle.invalidate_rect(*rect);
+        //     }
+        // }
+        self.handle.invalidate();
         self.invalid.clear();
     }
 
