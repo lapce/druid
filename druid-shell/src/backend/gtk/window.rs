@@ -24,29 +24,23 @@ use std::slice;
 use std::sync::{Arc, Mutex, Weak};
 use std::time::Instant;
 
+use gdk_sys::GdkKeymapKey;
+use gtk::gdk::{
+    EventKey, EventMask, EventType, ModifierType, ScrollDirection, Window, WindowTypeHint,
+};
 use gtk::gdk_pixbuf::Colorspace::Rgb;
 use gtk::gdk_pixbuf::Pixbuf;
 use gtk::glib::source::Continue;
 use gtk::glib::translate::FromGlib;
 use gtk::prelude::*;
 use gtk::traits::SettingsExt;
-use gtk::{AccelGroup, ApplicationWindow, DrawingArea};
-
-use gdk_sys::GdkKeymapKey;
-
-use anyhow::anyhow;
-use cairo::Surface;
-use gtk::gdk::{
-    EventKey, EventMask, EventType, ModifierType, ScrollDirection, Window, WindowTypeHint,
-};
-
+use gtk::{AccelGroup, ApplicationWindow};
 use gtk_rs::GLArea;
 use instant::Duration;
 use piet_wgpu::WgpuRenderer;
-use tracing::{error, warn};
-
 #[cfg(feature = "raw-win-handle")]
 use raw_window_handle::{unix::XcbHandle, HasRawWindowHandle, RawWindowHandle};
+use tracing::{error, warn};
 
 use crate::kurbo::{Insets, Point, Rect, Size, Vec2};
 use crate::piet::{Piet, PietText, RenderContext};
@@ -182,21 +176,6 @@ pub(crate) struct WindowState {
     gl_area: GLArea,
     renderer: RefCell<Option<WgpuRenderer>>,
     text: RefCell<Option<PietText>>,
-    // A cairo surface for us to render to; we copy this to the drawing_area whenever necessary.
-    // This extra buffer is necessitated by DrawingArea's painting model: when our paint callback
-    // is called, we are given a cairo context that's already clipped to the invalid region. This
-    // doesn't match up with our painting model, because we need to call `prepare_paint` before we
-    // know what the invalid region is.
-    //
-    // The way we work around this is by always invalidating the entire DrawingArea whenever we
-    // need repainting; this ensures that GTK gives us an unclipped cairo context. Meanwhile, we
-    // keep track of the actual invalid region. We use that region to render onto `surface`, which
-    // we then copy onto `drawing_area`.
-    surface: RefCell<Option<Surface>>,
-    // The size of `surface` in pixels. This could be bigger than `drawing_area`.
-    surface_size: Cell<(i32, i32)>,
-    // The invalid region, in display points.
-    invalid: RefCell<Region>,
     pub(crate) handler: RefCell<Box<dyn WinHandler>>,
     idle_queue: Arc<Mutex<Vec<IdleKind>>>,
     current_keycode: Cell<Option<u16>>,
@@ -362,9 +341,6 @@ impl WindowBuilder {
             gl_area,
             renderer: RefCell::new(None),
             text: RefCell::new(None),
-            surface: RefCell::new(None),
-            surface_size: Cell::new((0, 0)),
-            invalid: RefCell::new(Region::EMPTY),
             handler: RefCell::new(handler),
             idle_queue: Arc::new(Mutex::new(vec![])),
             current_keycode: Cell::new(None),
@@ -501,18 +477,10 @@ impl WindowBuilder {
 
                     state.with_handler(|h| h.prepare_paint());
 
-                    let invalid = match state.invalid.try_borrow_mut() {
-                        Ok(mut invalid) => std::mem::replace(&mut *invalid, Region::EMPTY),
-                        Err(_) => {
-                            error!("invalid region borrowed while drawing");
-                            Region::EMPTY
-                        }
-                    };
-
                     state.with_handler_and_dont_check_the_other_borrows(|handler| {
                         let mut renderer = state.renderer.borrow_mut();
                         let mut piet_context = Piet::new(renderer.as_mut().unwrap());
-                        handler.paint(&mut piet_context, &invalid);
+                        handler.paint(&mut piet_context, &Region::from(size_px.to_rect()));
                         if let Err(e) = piet_context.finish() {
                             error!("piet error on render: {:?}", e);
                         }
@@ -796,11 +764,6 @@ impl WindowBuilder {
 impl WindowState {
     #[track_caller]
     fn with_handler<T, F: FnOnce(&mut dyn WinHandler) -> T>(&self, f: F) -> Option<T> {
-        if self.invalid.try_borrow_mut().is_err() || self.surface.try_borrow_mut().is_err() {
-            error!("other RefCells were borrowed when calling into the handler");
-            return None;
-        }
-
         let ret = self.with_handler_and_dont_check_the_other_borrows(f);
 
         self.run_deferred();
@@ -821,42 +784,6 @@ impl WindowState {
         }
     }
 
-    fn resize_surface(&self, width: i32, height: i32) -> Result<(), anyhow::Error> {
-        fn next_size(x: i32) -> i32 {
-            // We round up to the nearest multiple of `accuracy`, which is between x/2 and x/4.
-            // Don't bother rounding to anything smaller than 32 = 2^(7-1).
-            let accuracy = 1 << ((32 - x.leading_zeros()).max(7) - 2);
-            let mask = accuracy - 1;
-            (x + mask) & !mask
-        }
-
-        let mut surface = self.surface.borrow_mut();
-        let mut cur_size = self.surface_size.get();
-        let (width, height) = (next_size(width), next_size(height));
-        if surface.is_none() || cur_size != (width, height) {
-            cur_size = (width, height);
-            self.surface_size.set(cur_size);
-            if let Some(s) = surface.as_ref() {
-                s.finish();
-            }
-            *surface = None;
-
-            // if let Some(w) = self.drawing_area.window() {
-            //     if self.is_transparent.get() {
-            //         *surface = w.create_similar_surface(cairo::Content::ColorAlpha, width, height);
-            //     } else {
-            //         *surface = w.create_similar_surface(cairo::Content::Color, width, height);
-            //     }
-            //     if surface.is_none() {
-            //         return Err(anyhow!("create_similar_surface failed"));
-            //     }
-            // } else {
-            //     return Err(anyhow!("drawing area has no window"));
-            // }
-        }
-        Ok(())
-    }
-
     /// Queues a call to `prepare_paint` and `paint`, but without marking any region for
     /// invalidation.
     fn request_anim_frame(&self) {
@@ -868,13 +795,8 @@ impl WindowState {
     }
 
     /// Invalidates a rectangle, given in display points.
-    fn invalidate_rect(&self, rect: Rect) {
-        if let Ok(mut region) = self.invalid.try_borrow_mut() {
-            region.add_rect(rect);
-            self.window.queue_draw();
-        } else {
-            warn!("Not invalidating rect because region already borrowed");
-        }
+    fn invalidate_rect(&self, _rect: Rect) {
+        self.window.queue_draw();
     }
 
     /// Pushes a deferred op onto the queue.
