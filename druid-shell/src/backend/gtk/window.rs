@@ -40,7 +40,9 @@ use gtk::gdk::{
     EventKey, EventMask, EventType, ModifierType, ScrollDirection, Window, WindowTypeHint,
 };
 
+use gtk_rs::GLArea;
 use instant::Duration;
+use piet_wgpu::WgpuRenderer;
 use tracing::{error, warn};
 
 #[cfg(feature = "raw-win-handle")]
@@ -178,6 +180,9 @@ pub(crate) struct WindowState {
     /// this is true, and this gets set to true when our client requests a close.
     closing: Cell<bool>,
     drawing_area: DrawingArea,
+    gl_area: GLArea,
+    renderer: RefCell<Option<WgpuRenderer>>,
+    text: RefCell<Option<PietText>>,
     // A cairo surface for us to render to; we copy this to the drawing_area whenever necessary.
     // This extra buffer is necessitated by DrawingArea's painting model: when our paint callback
     // is called, we are given a cairo context that's already clipped to the invalid region. This
@@ -314,6 +319,7 @@ impl WindowBuilder {
         let vbox = gtk::Box::new(gtk::Orientation::Vertical, 0);
         window.add(&vbox);
         let drawing_area = gtk::DrawingArea::new();
+        let gl_area = gtk::GLArea::new();
 
         // Set the parent widget and handle level specific code
         let mut parent: Option<crate::WindowHandle> = None;
@@ -355,6 +361,9 @@ impl WindowBuilder {
             is_transparent: Cell::new(transparent),
             closing: Cell::new(false),
             drawing_area,
+            gl_area,
+            renderer: RefCell::new(None),
+            text: RefCell::new(None),
             surface: RefCell::new(None),
             surface_size: Cell::new((0, 0)),
             invalid: RefCell::new(Region::EMPTY),
@@ -431,6 +440,60 @@ impl WindowBuilder {
                 min_size_px.height.round() as i32,
             );
         }
+
+        win_state
+            .gl_area
+            .connect_realize(clone!(handle => move |gl_area| {
+                gl_area.make_current();
+                gl_loader::init_gl();
+                let renderer = WgpuRenderer::new(|addr| gl_loader::get_proc_address(addr) as *const _)
+                    .map_err(|_| {
+                        ShellError::Other(anyhow::anyhow!("can't create opengl context").into())
+                    }).unwrap();
+                *handle.state.upgrade().unwrap().text.borrow_mut()  = Some(renderer.text());
+                *handle.state.upgrade().unwrap().renderer.borrow_mut()  = Some(renderer);
+
+                if let Some(clock) = gl_area.frame_clock() {
+                    clock.connect_before_paint(clone!(handle => move |_clock|{
+                        if let Some(state) = handle.state.upgrade() {
+                            state.in_draw.set(true);
+                        }
+                    }));
+                    clock.connect_after_paint(clone!(handle => move |_clock|{
+                        if let Some(state) = handle.state.upgrade() {
+                            state.in_draw.set(false);
+                            if state.request_animation.get() {
+                                state.request_animation.set(false);
+                                state.drawing_area.queue_draw();
+                            }
+                        }
+                    }));
+                }
+            }));
+
+        win_state
+            .gl_area
+            .connect_render(clone!(handle => move |_, _| {
+                if let Some(state) = handle.state.upgrade() {
+                    let invalid = match state.invalid.try_borrow_mut() {
+                        Ok(mut invalid) => std::mem::replace(&mut *invalid, Region::EMPTY),
+                        Err(_) => {
+                            error!("invalid region borrowed while drawing");
+                            Region::EMPTY
+                        }
+                    };
+
+                    state.with_handler_and_dont_check_the_other_borrows(|handler| {
+                        let mut renderer = state.renderer.borrow_mut();
+                        let mut piet_context = Piet::new(renderer.as_mut().unwrap());
+                        handler.paint(&mut piet_context, &invalid);
+                        if let Err(e) = piet_context.finish() {
+                            error!("piet error on render: {:?}", e);
+                        }
+                    });
+                }
+                Inhibit(false)
+            }));
 
         win_state
             .drawing_area
@@ -512,7 +575,8 @@ impl WindowBuilder {
                         surface_context.clip();
 
                         surface_context.scale(scale.x(), scale.y());
-                        let mut piet_context = Piet::new(&surface_context);
+                        let mut renderer = state.renderer.borrow_mut();
+                        let mut piet_context = Piet::new(renderer.as_mut().unwrap());
                         handler.paint(&mut piet_context, &invalid);
                         if let Err(e) = piet_context.finish() {
                             error!("piet error on render: {:?}", e);
@@ -783,10 +847,10 @@ impl WindowBuilder {
                 }
             }));
 
-        vbox.pack_end(&win_state.drawing_area, true, true, 0);
-        win_state.drawing_area.realize();
+        vbox.pack_end(&win_state.gl_area, true, true, 0);
+        win_state.gl_area.realize();
         win_state
-            .drawing_area
+            .gl_area
             .window()
             .expect("realize didn't create window")
             .set_event_compression(false);
@@ -1136,7 +1200,7 @@ impl WindowHandle {
     }
 
     pub fn text(&self) -> PietText {
-        PietText::new()
+        self.state.upgrade().unwrap().text.borrow().clone().unwrap()
     }
 
     pub fn add_text_field(&self) -> TextFieldToken {

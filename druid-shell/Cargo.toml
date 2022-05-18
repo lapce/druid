@@ -102,6 +102,7 @@ bitflags = "1.2.1"
 cgl = "0.3"
 
 [target.'cfg(any(target_os="linux", target_os="openbsd"))'.dependencies]
+gl_loader = "0.1.2"
 ashpd = { version = "0.3.0", optional = true }
 # TODO(x11/dependencies): only use feature "xcb" if using X11
 cairo-rs = { version = "0.14.0", default_features = false, features = ["xcb"] }
