@@ -796,7 +796,14 @@ fn mouse_up(this: &mut Object, nsevent: id, button: MouseButton) {
         } else {
             false
         };
-        let event = mouse_event(nsevent, this as id, 0, focus, button, Vec2::ZERO);
+        let event = mouse_event(
+            nsevent,
+            this as id,
+            nsevent.clickCount() as u8,
+            focus,
+            button,
+            Vec2::ZERO,
+        );
         (*view_state).handler.mouse_up(&event);
         // If we have already received a mouseExited event then that means
         // we're still receiving mouse events because some buttons are being held down.
