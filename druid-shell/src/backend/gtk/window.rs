@@ -168,7 +168,6 @@ enum IdleKind {
 pub(crate) struct WindowState {
     window: ApplicationWindow,
     scale: Cell<Scale>,
-    position: Cell<(i32, i32)>,
     size: Cell<Size>,
     is_transparent: Cell<bool>,
     /// Used to determine whether to honor close requests from the system: we inhibit them unless
@@ -336,7 +335,6 @@ impl WindowBuilder {
         let state = WindowState {
             window,
             scale: Cell::new(scale),
-            position: Cell::new((0, 0)),
             size: Cell::new(size),
             is_transparent: Cell::new(transparent),
             closing: Cell::new(false),
@@ -466,13 +464,6 @@ impl WindowBuilder {
                         scale_changed = true;
                         state.with_handler(|h| h.scale(scale));
                         state.renderer.borrow_mut().as_mut().unwrap().set_scale(scale.x());
-                    }
-
-                    let reported_position = state.window.position();
-                    let mut position = state.position.get();
-                    if position != reported_position {
-                        position = reported_position;
-                        state.with_handler(|h| h.position(Point::new(position.0 as f64, position.1 as f64)));
                     }
 
                     let extents = widget.allocation();
