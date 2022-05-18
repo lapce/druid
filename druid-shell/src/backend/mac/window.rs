@@ -1447,28 +1447,28 @@ impl WindowHandle {
             match (state, cur_state) {
                 (s1, s2) if s1 == s2 => (),
                 (WindowState::Minimized, _) => {
-                    let () = msg_send!(
+                    let () = msg_send![
                         window,
                         performSelectorOnMainThread: sel!(performMiniaturize:) withObject: nil waitUntilDone: NO
-                    );
+                    ];
                 }
                 (WindowState::Maximized, _) => {
-                    let () = msg_send!(
+                    let () = msg_send![
                         window,
                         performSelectorOnMainThread: sel!(performZoom:) withObject: nil waitUntilDone: NO
-                    );
+                    ];
                 }
                 (WindowState::Restored, WindowState::Maximized) => {
-                    let () = msg_send!(
+                    let () = msg_send![
                         window,
                         performSelectorOnMainThread: sel!(performZoom:) withObject: nil waitUntilDone: NO
-                    );
+                    ];
                 }
                 (WindowState::Restored, WindowState::Minimized) => {
-                    let () = msg_send!(
+                    let () = msg_send![
                         window,
                         performSelectorOnMainThread: sel!(deminiaturize:) withObject: nil waitUntilDone: NO
-                    );
+                    ];
                 }
                 (WindowState::Restored, WindowState::Restored) => {} // Can't be reached
             }
