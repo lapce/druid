@@ -28,5 +28,3 @@ pub mod screen;
 pub mod text_input;
 pub mod util;
 pub mod window;
-
-pub(crate) use crate::icon::NoIcon as PlatformIcon;

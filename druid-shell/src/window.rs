@@ -29,6 +29,7 @@ use crate::mouse::{Cursor, CursorDesc, MouseEvent};
 use crate::region::Region;
 use crate::scale::Scale;
 use crate::text::{Event, InputHandler};
+use crate::Icon;
 use piet_wgpu::PietText;
 #[cfg(feature = "raw-win-handle")]
 use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
@@ -467,6 +468,11 @@ impl WindowBuilder {
     /// [display points]: crate::Scale
     pub fn set_min_size(&mut self, size: Size) {
         self.0.set_min_size(size)
+    }
+
+    /// Sets the window icon.
+    pub fn set_window_icon(&mut self, window_icon: Icon) {
+        self.0.set_window_icon(window_icon)
     }
 
     /// Set whether the window should be resizable.

@@ -134,6 +134,15 @@ enum DeferredOp {
     ContextMenu(Menu, WindowHandle),
 }
 
+/// An icon used for the window titlebar, taskbar, etc.
+#[derive(Debug, Clone)]
+pub struct PlatformIcon {
+    raw: Vec<u8>,
+    width: i32,
+    height: i32,
+    row_stride: i32,
+}
+
 /// Builder abstraction for creating new windows
 pub(crate) struct WindowBuilder {
     app: Application,

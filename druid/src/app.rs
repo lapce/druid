@@ -25,7 +25,7 @@ use crate::{AppDelegate, Data, Env, LocalizedString, Menu, Widget};
 
 use tracing::warn;
 
-use druid_shell::WindowState;
+use druid_shell::{Icon, WindowState};
 
 /// A function that modifies the initial environment.
 type EnvSetupFn<T> = dyn FnOnce(&mut Env, &T);
@@ -64,6 +64,7 @@ pub struct WindowConfig {
     pub(crate) show_titlebar: Option<bool>,
     pub(crate) level: Option<WindowLevel>,
     pub(crate) state: Option<WindowState>,
+    pub(crate) window_icon: Option<Icon>,
 }
 
 /// A description of a window to be instantiated.
@@ -288,6 +289,7 @@ impl Default for WindowConfig {
             transparent: None,
             level: None,
             state: None,
+            window_icon: None,
         }
     }
 }
@@ -342,6 +344,12 @@ impl WindowConfig {
     /// [display points]: struct.Scale.html
     pub fn with_min_size(mut self, size: impl Into<Size>) -> Self {
         self.min_size = Some(size.into());
+        self
+    }
+
+    /// Set the window's icon
+    pub fn with_window_icon(mut self, icon: Icon) -> Self {
+        self.window_icon = Some(icon);
         self
     }
 
@@ -422,6 +430,10 @@ impl WindowConfig {
 
         if let Some(min_size) = self.min_size {
             builder.set_min_size(min_size);
+        }
+
+        if let Some(window_icon) = self.window_icon {
+            builder.set_window_icon(window_icon);
         }
     }
 
@@ -555,6 +567,12 @@ impl<T: Data> WindowDesc<T> {
     /// [display points]: struct.Scale.html
     pub fn with_min_size(mut self, size: impl Into<Size>) -> Self {
         self.config = self.config.with_min_size(size);
+        self
+    }
+
+    /// Set the window's icon
+    pub fn with_window_icon(mut self, icon: Icon) -> Self {
+        self.config = self.config.with_window_icon(icon);
         self
     }
 

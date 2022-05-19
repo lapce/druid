@@ -58,6 +58,7 @@ use super::text_input::NSRange;
 use super::util::{assert_main_thread, make_nsstring};
 use crate::common_util::IdleCallback;
 use crate::dialog::{FileDialogOptions, FileDialogType};
+pub(crate) use crate::icon::NoIcon as PlatformIcon;
 use crate::keyboard_types::KeyState;
 use crate::mouse::{Cursor, CursorDesc, MouseButton, MouseButtons, MouseEvent};
 use crate::region::Region;
@@ -66,7 +67,7 @@ use crate::text::{Event, InputHandler};
 use crate::window::{
     FileDialogToken, IdleToken, TextFieldToken, TimerToken, WinHandler, WindowLevel, WindowState,
 };
-use crate::Error;
+use crate::{Error, Icon};
 
 #[allow(non_upper_case_globals)]
 const NSWindowDidBecomeKeyNotification: &str = "NSWindowDidBecomeKeyNotification";
@@ -222,6 +223,8 @@ impl WindowBuilder {
     pub fn set_min_size(&mut self, size: Size) {
         self.min_size = Some(size);
     }
+
+    pub fn set_window_icon(&mut self, _window_icon: Icon) {}
 
     pub fn resizable(&mut self, resizable: bool) {
         self.resizable = resizable;
