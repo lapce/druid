@@ -14,9 +14,12 @@
 
 //! Windows implementation of druid-shell.
 
+#[macro_use]
+pub mod util;
 mod accels;
 pub mod application;
 pub mod clipboard;
+mod dark_mode;
 pub mod dcomp;
 pub mod dialog;
 pub mod error;
@@ -26,7 +29,6 @@ pub mod menu;
 pub mod paint;
 pub mod screen;
 mod timers;
-pub mod util;
 pub mod window;
 
 // https://docs.microsoft.com/en-us/windows/win32/direct2d/render-targets-overview

@@ -33,12 +33,12 @@ use winapi::shared::windef::{HMONITOR, HWND, RECT};
 use winapi::shared::winerror::SUCCEEDED;
 use winapi::um::fileapi::{CreateFileA, GetFileType, OPEN_EXISTING};
 use winapi::um::handleapi::INVALID_HANDLE_VALUE;
-use winapi::um::libloaderapi::{GetModuleHandleW, GetProcAddress, LoadLibraryW};
+use winapi::um::libloaderapi::{GetModuleHandleW, GetProcAddress, LoadLibraryA, LoadLibraryW};
 use winapi::um::processenv::{GetStdHandle, SetStdHandle};
 use winapi::um::shellscalingapi::{MONITOR_DPI_TYPE, PROCESS_DPI_AWARENESS};
 use winapi::um::winbase::{FILE_TYPE_UNKNOWN, STD_ERROR_HANDLE, STD_OUTPUT_HANDLE};
 use winapi::um::wincon::{AttachConsole, ATTACH_PARENT_PROCESS};
-use winapi::um::winnt::{FILE_SHARE_WRITE, GENERIC_READ, GENERIC_WRITE};
+use winapi::um::winnt::{FILE_SHARE_WRITE, GENERIC_READ, GENERIC_WRITE, LPCSTR};
 
 use crate::kurbo::Rect;
 use crate::region::Region;
@@ -304,4 +304,34 @@ pub(crate) fn attach_console() {
             SetStdHandle(STD_ERROR_HANDLE, chnd);
         }
     }
+}
+
+// Helper function to dynamically load function pointer.
+// `library` and `function` must be zero-terminated.
+pub(super) fn get_function_impl(library: &str, function: &str) -> Option<*const c_void> {
+    assert_eq!(library.chars().last(), Some('\0'));
+    assert_eq!(function.chars().last(), Some('\0'));
+
+    // Library names we will use are ASCII so we can use the A version to avoid string conversion.
+    let module = unsafe { LoadLibraryA(library.as_ptr() as LPCSTR) };
+    if module.is_null() {
+        return None;
+    }
+
+    let function_ptr = unsafe { GetProcAddress(module, function.as_ptr() as LPCSTR) };
+    if function_ptr.is_null() {
+        return None;
+    }
+
+    Some(function_ptr as _)
+}
+
+macro_rules! get_function {
+    ($lib:expr, $func:ident) => {
+        crate::backend::windows::util::get_function_impl(
+            concat!($lib, '\0'),
+            concat!(stringify!($func), '\0'),
+        )
+        .map(|f| unsafe { std::mem::transmute::<*const _, $func>(f) })
+    };
 }

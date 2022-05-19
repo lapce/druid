@@ -56,6 +56,7 @@ use crate::piet::{Piet, PietText, RenderContext};
 
 use super::accels::register_accel;
 use super::application::Application;
+use super::dark_mode::try_theme;
 use super::dcomp::D3D11Device;
 use super::dialog::get_file_dialog_path;
 use super::error::Error;
@@ -1182,6 +1183,10 @@ impl WndProc for MyWndProc {
 
                 Some(0)
             }
+            WM_SETTINGCHANGE => {
+                try_theme(hwnd, None);
+                Some(0)
+            }
             WM_CLOSE => self
                 .with_wnd_state(|s| s.handler.request_close())
                 .map(|_| 0),
@@ -1453,6 +1458,8 @@ impl WindowBuilder {
             if hwnd.is_null() {
                 return Err(Error::NullHwnd);
             }
+
+            try_theme(hwnd, None);
 
             if let Some(size_dp) = self.size {
                 if let Ok(scale) = handle.get_scale() {
