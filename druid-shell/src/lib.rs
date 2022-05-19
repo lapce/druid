@@ -63,6 +63,7 @@ mod dialog;
 mod error;
 mod gl;
 mod hotkey;
+mod icon;
 mod keyboard;
 mod menu;
 mod mouse;
