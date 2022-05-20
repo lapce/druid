@@ -98,8 +98,14 @@ mod levels {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq)]
 pub(crate) struct PlatformIcon {}
+
+impl PlatformIcon {
+    pub fn from_rgba(_rgba: Vec<u8>, _width: u32, _height: u32) -> Result<Self, Error> {
+        Err(Error::Other(anyhow::anyhow!("icon not supported").into()))
+    }
+}
 
 #[derive(Clone)]
 pub(crate) struct WindowHandle {
