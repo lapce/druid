@@ -58,7 +58,6 @@ use super::text_input::NSRange;
 use super::util::{assert_main_thread, make_nsstring};
 use crate::common_util::IdleCallback;
 use crate::dialog::{FileDialogOptions, FileDialogType};
-pub(crate) use crate::icon::NoIcon as PlatformIcon;
 use crate::keyboard_types::KeyState;
 use crate::mouse::{Cursor, CursorDesc, MouseButton, MouseButtons, MouseEvent};
 use crate::region::Region;
@@ -98,6 +97,9 @@ mod levels {
         }
     }
 }
+
+#[derive(Clone)]
+pub(crate) struct PlatformIcon {}
 
 #[derive(Clone)]
 pub(crate) struct WindowHandle {
