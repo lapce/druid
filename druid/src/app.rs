@@ -432,7 +432,7 @@ impl WindowConfig {
             builder.set_min_size(min_size);
         }
 
-        if let Some(window_icon) = self.window_icon {
+        if let Some(window_icon) = self.window_icon.clone() {
             builder.set_window_icon(window_icon);
         }
     }

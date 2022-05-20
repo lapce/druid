@@ -50,10 +50,10 @@ pub enum GlRequest {
 
 impl GlRequest {
     /// Extract the desktop GL version, if any.
-    pub fn to_gl_version(&self) -> Option<(u8, u8)> {
+    pub fn to_gl_version(self) -> Option<(u8, u8)> {
         match self {
-            &GlRequest::Specific(Api::OpenGl, opengl_version) => Some(opengl_version),
-            &GlRequest::GlThenGles { opengl_version, .. } => Some(opengl_version),
+            GlRequest::Specific(Api::OpenGl, opengl_version) => Some(opengl_version),
+            GlRequest::GlThenGles { opengl_version, .. } => Some(opengl_version),
             _ => None,
         }
     }

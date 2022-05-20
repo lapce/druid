@@ -15,7 +15,7 @@ default-target = "x86_64-pc-windows-msvc"
 
 [features]
 default = ["gtk"]
-gtk = ["gdk-sys", "glib-sys", "gtk-sys", "gtk-rs"]
+gtk = ["gdk-sys", "glib-sys", "gtk-sys", "gtk-rs", "gdk-pixbuf"]
 x11 = [
     "ashpd",
     "bindgen",
@@ -109,6 +109,7 @@ cairo-rs = { version = "0.14.0", default_features = false, features = ["xcb"] }
 cairo-sys-rs = { version = "0.14.0", default_features = false, optional = true }
 futures = { version = "0.3.21", optional = true, features = ["executor"]}
 gdk-sys = { version = "0.14.0", optional = true }
+gdk-pixbuf = { version = "0.14.0", features = [ "v2_36_8" ], optional = true }
 # `gtk` gets renamed to `gtk-rs` so that we can use `gtk` as the feature name.
 gtk-rs = { version = "0.14.0", features = ["v3_22"], package = "gtk", optional = true }
 glib-sys = { version = "0.14.0", optional = true }

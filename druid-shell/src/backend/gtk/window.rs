@@ -44,6 +44,7 @@ use tracing::{error, warn};
 
 use crate::kurbo::{Insets, Point, Rect, Size, Vec2};
 use crate::piet::{Piet, PietText, RenderContext};
+use crate::Icon;
 
 use crate::common_util::{ClickCounter, IdleCallback};
 use crate::dialog::{FileDialogOptions, FileDialogType, FileInfo};
@@ -135,12 +136,43 @@ enum DeferredOp {
 }
 
 /// An icon used for the window titlebar, taskbar, etc.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct PlatformIcon {
     raw: Vec<u8>,
     width: i32,
     height: i32,
     row_stride: i32,
+}
+
+impl From<PlatformIcon> for Pixbuf {
+    fn from(icon: PlatformIcon) -> Self {
+        gdk_pixbuf::Pixbuf::from_mut_slice(
+            icon.raw,
+            Rgb,
+            true,
+            8,
+            icon.width,
+            icon.height,
+            icon.row_stride,
+        )
+    }
+}
+
+impl PlatformIcon {
+    /// Creates an `Icon` from 32bpp RGBA data.
+    ///
+    /// The length of `rgba` must be divisible by 4, and `width * height` must equal
+    /// `rgba.len() / 4`. Otherwise, this will return a `BadIcon` error.
+    pub fn from_rgba(rgba: Vec<u8>, width: u32, height: u32) -> Result<Self, ShellError> {
+        let row_stride =
+            gdk_pixbuf::Pixbuf::calculate_rowstride(Rgb, true, 8, width as i32, height as i32);
+        Ok(Self {
+            raw: rgba,
+            width: width as i32,
+            height: height as i32,
+            row_stride,
+        })
+    }
 }
 
 /// Builder abstraction for creating new windows
@@ -154,6 +186,7 @@ pub(crate) struct WindowBuilder {
     state: Option<window::WindowState>,
     size: Size,
     min_size: Option<Size>,
+    window_icon: Option<Icon>,
     resizable: bool,
     show_titlebar: bool,
     transparent: bool,
@@ -224,6 +257,7 @@ impl WindowBuilder {
             min_size: None,
             resizable: true,
             show_titlebar: true,
+            window_icon: None,
             transparent: false,
         }
     }
@@ -242,6 +276,10 @@ impl WindowBuilder {
 
     pub fn resizable(&mut self, resizable: bool) {
         self.resizable = resizable;
+    }
+
+    pub fn set_window_icon(&mut self, window_icon: Icon) {
+        self.window_icon = Some(window_icon);
     }
 
     pub fn show_titlebar(&mut self, show_titlebar: bool) {
@@ -291,6 +329,10 @@ impl WindowBuilder {
             }
         }
         window.set_app_paintable(transparent);
+
+        if let Some(icon) = self.window_icon {
+            window.set_icon(Some(&icon.inner.into()));
+        }
 
         // Get the scale factor based on the GTK reported DPI
         let scale_factor = window.scale_factor() as f64;
