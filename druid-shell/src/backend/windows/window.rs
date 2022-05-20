@@ -74,10 +74,10 @@ use crate::mouse::{Cursor, CursorDesc, MouseButton, MouseButtons, MouseEvent};
 use crate::region::Region;
 use crate::scale::{Scalable, Scale, ScaledArea};
 use crate::text::{simulate_input, Event};
-use crate::window;
 use crate::window::{
     FileDialogToken, IdleToken, TextFieldToken, TimerToken, WinHandler, WindowLevel,
 };
+use crate::{window, Icon};
 
 /// The backend target DPI.
 ///
@@ -97,6 +97,7 @@ pub(crate) struct WindowBuilder {
     transparent: bool,
     min_size: Option<Size>,
     position: Option<Point>,
+    window_icon: Option<Icon>,
     level: Option<WindowLevel>,
     state: window::WindowState,
 }
@@ -161,6 +162,111 @@ enum DeferredOp {
     SetResizable(bool),
     SetWindowState(window::WindowState),
     ReleaseMouseCapture,
+}
+
+pub(crate) const PIXEL_SIZE: usize = std::mem::size_of::<Pixel>();
+
+#[repr(C)]
+#[derive(Debug)]
+pub(crate) struct Pixel {
+    pub(crate) r: u8,
+    pub(crate) g: u8,
+    pub(crate) b: u8,
+    pub(crate) a: u8,
+}
+
+impl Pixel {
+    fn to_bgra(&mut self) {
+        mem::swap(&mut self.r, &mut self.b);
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct RgbaIcon {
+    pub(crate) rgba: Vec<u8>,
+    pub(crate) width: u32,
+    pub(crate) height: u32,
+}
+
+impl RgbaIcon {
+    pub fn from_rgba(rgba: Vec<u8>, width: u32, height: u32) -> Result<Self, ShellError> {
+        if rgba.len() % PIXEL_SIZE != 0 {
+            return Err(ShellError::Other(anyhow::anyhow!("bad icon").into()));
+        }
+        let pixel_count = rgba.len() / PIXEL_SIZE;
+        if pixel_count != (width * height) as usize {
+            Err(ShellError::Other(anyhow::anyhow!("bad icon").into()))
+        } else {
+            Ok(RgbaIcon {
+                rgba,
+                width,
+                height,
+            })
+        }
+    }
+
+    fn into_windows_icon(self) -> Result<PlatformIcon, ShellError> {
+        let mut rgba = self.rgba;
+        let pixel_count = rgba.len() / PIXEL_SIZE;
+        let mut and_mask = Vec::with_capacity(pixel_count);
+        let pixels =
+            unsafe { std::slice::from_raw_parts_mut(rgba.as_mut_ptr() as *mut Pixel, pixel_count) };
+        for pixel in pixels {
+            and_mask.push(pixel.a.wrapping_sub(std::u8::MAX)); // invert alpha channel
+            pixel.to_bgra();
+        }
+        assert_eq!(and_mask.len(), pixel_count);
+        let handle = unsafe {
+            CreateIcon(
+                0 as HINSTANCE,
+                self.width as i32,
+                self.height as i32,
+                1,
+                (PIXEL_SIZE * 8) as u8,
+                and_mask.as_ptr() as *const u8,
+                rgba.as_ptr() as *const u8,
+            ) as HICON
+        };
+        Ok(PlatformIcon::from_handle(handle))
+    }
+}
+
+#[derive(Debug, PartialEq)]
+struct RaiiIcon {
+    handle: HICON,
+}
+
+#[derive(Clone, PartialEq)]
+pub struct PlatformIcon {
+    inner: Arc<RaiiIcon>,
+}
+
+impl PlatformIcon {
+    pub fn from_rgba(rgba: Vec<u8>, width: u32, height: u32) -> Result<Self, ShellError> {
+        let rgba_icon = RgbaIcon::from_rgba(rgba, width, height)?;
+        rgba_icon.into_windows_icon()
+    }
+
+    fn from_handle(handle: HICON) -> Self {
+        Self {
+            inner: Arc::new(RaiiIcon { handle }),
+        }
+    }
+
+    pub fn as_raw_handle(&self) -> HICON {
+        self.inner.handle
+    }
+
+    pub fn set_for_window(&self, hwnd: HWND) {
+        unsafe {
+            SendMessageW(
+                hwnd,
+                WM_SETICON,
+                ICON_SMALL as WPARAM,
+                self.as_raw_handle() as LPARAM,
+            );
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -1255,6 +1361,7 @@ impl WindowBuilder {
             size: None,
             min_size: None,
             position: None,
+            window_icon: None,
             level: None,
             state: window::WindowState::Restored,
         }
@@ -1275,6 +1382,10 @@ impl WindowBuilder {
 
     pub fn resizable(&mut self, resizable: bool) {
         self.resizable = resizable;
+    }
+
+    pub fn set_window_icon(&mut self, window_icon: Icon) {
+        self.window_icon = Some(window_icon);
     }
 
     pub fn show_titlebar(&mut self, show_titlebar: bool) {
@@ -1457,6 +1568,10 @@ impl WindowBuilder {
             );
             if hwnd.is_null() {
                 return Err(Error::NullHwnd);
+            }
+
+            if let Some(icon) = self.window_icon {
+                icon.inner.set_for_window(hwnd);
             }
 
             try_theme(hwnd, None);
