@@ -195,6 +195,7 @@ struct ViewState {
     renderer: WgpuRenderer,
     active_text_input: Option<TextFieldToken>,
     parent: Option<crate::WindowHandle>,
+    context_menu_pos: Point,
 }
 
 #[derive(Clone, PartialEq)]
@@ -653,6 +654,7 @@ fn make_view(
             gl_context,
             active_text_input: None,
             parent: None,
+            context_menu_pos: Point::ZERO,
         };
 
         let state_ptr = Box::into_raw(Box::new(view_state)) as *mut c_void;
@@ -1061,10 +1063,9 @@ extern "C" fn handle_menu_item(this: &mut Object, _: Sel, item: id) {
 
 extern "C" fn show_context_menu(this: &mut Object, _: Sel, item: id) {
     unsafe {
-        let window: id = msg_send![this as *const _, window];
-        let mut location: NSPoint = msg_send![window, mouseLocationOutsideOfEventStream];
-        let bounds: NSRect = msg_send![this as *const _, bounds];
-        location.y = bounds.size.height - location.y;
+        let view_state: *mut c_void = *this.get_ivar("viewState");
+        let view_state = &mut *(view_state as *mut ViewState);
+        let location = NSPoint::new(view_state.context_menu_pos.x, view_state.context_menu_pos.y);
         let _: BOOL = msg_send![item, popUpMenuPositioningItem: nil atLocation: location inView: this as *const _];
     }
 }
@@ -1514,9 +1515,14 @@ impl WindowHandle {
     //FIXME: we should be using the x, y values passed by the caller, but then
     //we have to figure out some way to pass them along with this performSelector:
     //call. This isn't super hard, I'm just not up for it right now.
-    pub fn show_context_menu(&self, menu: Menu, _pos: Point) {
+    pub fn show_context_menu(&self, menu: Menu, pos: Point) {
+        let view = self.nsview.load();
         unsafe {
-            let () = msg_send![*self.nsview.load(), performSelectorOnMainThread: sel!(showContextMenu:) withObject: menu.menu waitUntilDone: NO];
+            let state: *mut c_void = *(*view).as_ref().unwrap().get_ivar("viewState");
+            let state = &mut (*(state as *mut ViewState));
+            state.context_menu_pos = pos;
+
+            let () = msg_send![*view, performSelectorOnMainThread: sel!(showContextMenu:) withObject: menu.menu waitUntilDone: NO];
         }
     }
 
