@@ -198,8 +198,10 @@ impl<T: Data, W: Widget<T>> Widget<T> for Scroll<T, W> {
                         let view_port_changed =
                             port.default_scroll_to_view_handling(ctx, global_highlight_rect);
                         if view_port_changed {
-                            scroll_component
-                                .reset_scrollbar_fade(|duration| ctx.request_timer(duration), env);
+                            scroll_component.reset_scrollbar_fade(
+                                |duration| ctx.request_timer(duration, None),
+                                env,
+                            );
                         }
                     }
                 }
@@ -232,7 +234,7 @@ impl<T: Data, W: Widget<T>> Widget<T> for Scroll<T, W> {
         let _ = self.scroll_by(Vec2::ZERO);
         if old_size != self_size {
             self.scroll_component
-                .reset_scrollbar_fade(|d| ctx.request_timer(d), env);
+                .reset_scrollbar_fade(|d| ctx.request_timer(d, None), env);
         }
 
         trace!("Computed size: {}", self_size);

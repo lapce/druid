@@ -395,7 +395,7 @@ impl ScrollComponent {
 
                     if !scrollbar_is_hovered {
                         self.hovered = BarHoveredState::None;
-                        self.reset_scrollbar_fade(|d| ctx.request_timer(d), env);
+                        self.reset_scrollbar_fade(|d| ctx.request_timer(d, None), env);
                     }
 
                     ctx.set_handled();
@@ -451,7 +451,7 @@ impl ScrollComponent {
                     // if we have just stopped hovering
                     if self.hovered.is_hovered() && !scrollbar_is_hovered {
                         self.hovered = BarHoveredState::None;
-                        self.reset_scrollbar_fade(|d| ctx.request_timer(d), env);
+                        self.reset_scrollbar_fade(|d| ctx.request_timer(d, None), env);
                     }
                 }
                 Event::Timer(id) if *id == self.timer_id => {
@@ -498,7 +498,7 @@ impl ScrollComponent {
                 if port.pan_by(mouse.wheel_delta) {
                     ctx.request_paint();
                     ctx.set_handled();
-                    self.reset_scrollbar_fade(|d| ctx.request_timer(d), env);
+                    self.reset_scrollbar_fade(|d| ctx.request_timer(d, None), env);
                 }
             }
         }
@@ -510,7 +510,7 @@ impl ScrollComponent {
     pub fn lifecycle(&mut self, ctx: &mut LifeCycleCtx, event: &LifeCycle, env: &Env) {
         if let LifeCycle::Size(_) = event {
             // Show the scrollbars any time our size changes
-            self.reset_scrollbar_fade(|d| ctx.request_timer(d), env);
+            self.reset_scrollbar_fade(|d| ctx.request_timer(d, None), env);
         }
     }
 }

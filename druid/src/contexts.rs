@@ -511,9 +511,14 @@ impl_context_method!(
         ///
         /// The return value is a token, which can be used to associate the
         /// request with the event.
-        pub fn request_timer(&mut self, deadline: Duration) -> TimerToken {
+        pub fn request_timer(
+            &mut self,
+            deadline: Duration,
+            widget_id: Option<WidgetId>,
+        ) -> TimerToken {
             trace!("request_timer deadline={:?}", deadline);
-            self.state.request_timer(self.widget_state.id, deadline)
+            self.state
+                .request_timer(widget_id.unwrap_or(self.widget_state.id), deadline)
         }
     }
 );

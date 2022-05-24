@@ -420,7 +420,7 @@ impl<T: TextStorage + EditableText> Widget<T> for TextBox<T> {
                     if !mouse.focus {
                         ctx.request_focus();
                         self.was_focused_from_click = true;
-                        self.reset_cursor_blink(ctx.request_timer(CURSOR_BLINK_DURATION));
+                        self.reset_cursor_blink(ctx.request_timer(CURSOR_BLINK_DURATION, None));
                     } else {
                         ctx.set_handled();
                     }
@@ -431,7 +431,7 @@ impl<T: TextStorage + EditableText> Widget<T> for TextBox<T> {
                     if *id == self.cursor_timer && ctx.has_focus() {
                         self.cursor_on = !self.cursor_on;
                         ctx.request_paint();
-                        self.cursor_timer = ctx.request_timer(CURSOR_BLINK_DURATION);
+                        self.cursor_timer = ctx.request_timer(CURSOR_BLINK_DURATION, None);
                     }
                 } else if self.cursor_on {
                     self.cursor_on = false;
@@ -439,7 +439,7 @@ impl<T: TextStorage + EditableText> Widget<T> for TextBox<T> {
                 }
             }
             Event::ImeStateChange => {
-                self.reset_cursor_blink(ctx.request_timer(CURSOR_BLINK_DURATION));
+                self.reset_cursor_blink(ctx.request_timer(CURSOR_BLINK_DURATION, None));
             }
             Event::Command(ref cmd)
                 if !self.text().is_composing()
@@ -513,7 +513,7 @@ impl<T: TextStorage + EditableText> Widget<T> for TextBox<T> {
                     ctx.invalidate_text_input(ImeInvalidation::SelectionChanged);
                 }
                 self.text_mut().has_focus = true;
-                self.reset_cursor_blink(ctx.request_timer(CURSOR_BLINK_DURATION));
+                self.reset_cursor_blink(ctx.request_timer(CURSOR_BLINK_DURATION, None));
                 self.was_focused_from_click = false;
                 ctx.request_paint();
                 ctx.scroll_to_view();

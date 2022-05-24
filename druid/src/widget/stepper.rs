@@ -236,7 +236,7 @@ impl Widget<f64> for Stepper {
                         self.increment(data);
                     }
 
-                    self.timer_id = ctx.request_timer(STEPPER_REPEAT_DELAY);
+                    self.timer_id = ctx.request_timer(STEPPER_REPEAT_DELAY, None);
 
                     ctx.request_paint();
                 }
@@ -258,7 +258,7 @@ impl Widget<f64> for Stepper {
                     if self.decrease_active {
                         self.decrement(data);
                     }
-                    self.timer_id = ctx.request_timer(STEPPER_REPEAT);
+                    self.timer_id = ctx.request_timer(STEPPER_REPEAT, None);
                 } else {
                     ctx.set_active(false);
                 }
