@@ -352,7 +352,6 @@ impl<T: Data> InnerAppState<T> {
 
     fn dispatch_cmd(&mut self, cmd: Command) -> Handled {
         let handled = self.delegate_cmd(&cmd);
-        self.do_update();
         if handled.is_handled() {
             return handled;
         }
