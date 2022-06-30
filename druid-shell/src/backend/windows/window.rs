@@ -161,6 +161,7 @@ enum DeferredOp {
     SetSize(Size),
     SetResizable(bool),
     SetWindowState(window::WindowState),
+    ShowWindow(bool),
     ReleaseMouseCapture,
 }
 
@@ -700,6 +701,12 @@ impl MyWndProc {
                     } else {
                         SW_SHOWNOACTIVATE
                     };
+                    unsafe {
+                        ShowWindow(hwnd, show);
+                    }
+                }
+                DeferredOp::ShowWindow(should_show) => {
+                    let show = if should_show { SW_SHOW } else { SW_HIDE };
                     unsafe {
                         ShowWindow(hwnd, show);
                     }
@@ -1779,10 +1786,14 @@ impl WindowHandle {
         }
     }
 
+    /// Hides the window.
+    pub fn hide(&self) {
+        self.defer(DeferredOp::ShowWindow(false));
+    }
+
     /// Bring this window to the front of the window stack and give it focus.
     pub fn bring_to_front_and_focus(&self) {
-        //FIXME: implementation goes here
-        warn!("bring_to_front_and_focus not yet implemented on windows");
+        self.defer(DeferredOp::ShowWindow(true));
     }
 
     pub fn request_anim_frame(&self) {
