@@ -306,7 +306,7 @@ impl WindowBuilder {
                 let toolbar = NSToolbar::alloc(nil);
                 toolbar.init_();
                 window.setToolbar_(toolbar);
-                window.setMovable_(false);
+                window.setMovable_(NO);
             }
 
             if let Some(min_size) = self.min_size {
