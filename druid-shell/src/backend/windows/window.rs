@@ -2029,6 +2029,8 @@ impl WindowHandle {
         self.state.upgrade().unwrap().wndproc.text()
     }
 
+    pub fn set_dragable_area(&self, _area: Region) {}
+
     pub fn add_text_field(&self) -> TextFieldToken {
         TextFieldToken::next()
     }
