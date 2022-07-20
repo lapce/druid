@@ -319,6 +319,11 @@ impl WindowHandle {
         self.0.text()
     }
 
+    /// Set a dragable area in the window
+    pub fn set_dragable_area(&self, area: Region) {
+        self.0.set_dragable_area(area);
+    }
+
     /// Register a new text input receiver for this window.
     ///
     /// This method should be called any time a new editable text field is

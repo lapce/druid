@@ -24,8 +24,8 @@ use std::time::Instant;
 use block::ConcreteBlock;
 use cocoa::appkit::{
     self, CGFloat, NSApp, NSApplication, NSAutoresizingMaskOptions, NSBackingStoreBuffered,
-    NSColor, NSEvent, NSOpenGLContext, NSScreen, NSView, NSViewHeightSizable, NSViewWidthSizable,
-    NSWindow, NSWindowStyleMask,
+    NSColor, NSEvent, NSOpenGLContext, NSScreen, NSToolbar, NSView, NSViewHeightSizable,
+    NSViewWidthSizable, NSWindow, NSWindowStyleMask,
 };
 use cocoa::base::{id, nil, BOOL, NO, YES};
 use cocoa::foundation::{
@@ -196,6 +196,8 @@ struct ViewState {
     active_text_input: Option<TextFieldToken>,
     parent: Option<crate::WindowHandle>,
     context_menu_pos: Point,
+    dragable_area: Region,
+    drag_window: bool,
 }
 
 #[derive(Clone, PartialEq)]
@@ -276,8 +278,9 @@ impl WindowBuilder {
             if self.show_titlebar {
                 style_mask |= NSWindowStyleMask::NSTitledWindowMask;
             } else {
-                style_mask |= NSWindowStyleMask::NSFullSizeContentViewWindowMask
-                    | NSWindowStyleMask::NSTitledWindowMask;
+                style_mask |= NSWindowStyleMask::NSTitledWindowMask
+                    | NSWindowStyleMask::NSFullSizeContentViewWindowMask
+                    | NSWindowStyleMask::NSUnifiedTitleAndToolbarWindowMask;
             }
 
             if self.resizable {
@@ -300,6 +303,10 @@ impl WindowBuilder {
             if !self.show_titlebar {
                 window.setTitlebarAppearsTransparent_(YES);
                 window.setTitleVisibility_(appkit::NSWindowTitleVisibility::NSWindowTitleHidden);
+                let toolbar = NSToolbar::alloc(nil);
+                toolbar.init_();
+                window.setToolbar_(toolbar);
+                window.setMovable_(false);
             }
 
             if let Some(min_size) = self.min_size {
@@ -655,6 +662,8 @@ fn make_view(
             active_text_input: None,
             parent: None,
             context_menu_pos: Point::ZERO,
+            dragable_area: Region::EMPTY,
+            drag_window: false,
         };
 
         let state_ptr = Box::into_raw(Box::new(view_state)) as *mut c_void;
@@ -779,6 +788,21 @@ fn mouse_down(this: &mut Object, nsevent: id, button: MouseButton) {
         let count = nsevent.clickCount() as u8;
         let focus = view_state.focus_click && button == MouseButton::Left;
         let event = mouse_event(nsevent, this as id, count, focus, button, Vec2::ZERO);
+
+        view_state.drag_window = false;
+        if count == 1 && button == MouseButton::Left {
+            for rect in view_state.dragable_area.rects() {
+                if rect.contains(event.pos) {
+                    let _: () = msg_send![
+                        *(*view_state).nswindow.load(),
+                        performWindowDragWithEvent: nsevent
+                    ];
+                    view_state.drag_window = true;
+                    break;
+                }
+            }
+        }
+
         (*view_state).handler.mouse_down(&event);
     }
 }
@@ -803,6 +827,7 @@ fn mouse_up(this: &mut Object, nsevent: id, button: MouseButton) {
     unsafe {
         let view_state: *mut c_void = *this.get_ivar("viewState");
         let view_state = &mut *(view_state as *mut ViewState);
+        view_state.drag_window = false;
         let focus = if view_state.focus_click && button == MouseButton::Left {
             view_state.focus_click = false;
             true
@@ -833,6 +858,9 @@ extern "C" fn mouse_move(this: &mut Object, _: Sel, nsevent: id) {
     unsafe {
         let view_state: *mut c_void = *this.get_ivar("viewState");
         let view_state = &mut *(view_state as *mut ViewState);
+        if view_state.drag_window {
+            return;
+        }
         let event = mouse_event(nsevent, this as id, 0, false, MouseButton::None, Vec2::ZERO);
         (*view_state).handler.mouse_move(&event);
     }
@@ -1247,6 +1275,17 @@ impl WindowHandle {
             let view = (*view).as_ref().unwrap();
             let state: *mut c_void = *view.get_ivar("viewState");
             (*(state as *mut ViewState)).renderer.text()
+        }
+    }
+
+    pub fn set_dragable_area(&self, area: Region) {
+        let view = self.nsview.load();
+        unsafe {
+            if let Some(view) = (*view).as_ref() {
+                let state: *mut c_void = *view.get_ivar("viewState");
+                let state = &mut (*(state as *mut ViewState));
+                state.dragable_area = area;
+            }
         }
     }
 

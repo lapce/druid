@@ -579,6 +579,11 @@ impl<T: Data> Window<T> {
         }
     }
 
+    /// Set a dragable area in the window
+    pub fn set_dragable_area(&self, area: Region) {
+        self.handle.set_dragable_area(area);
+    }
+
     pub(crate) fn get_ime_handler(
         &mut self,
         req_token: TextFieldToken,
