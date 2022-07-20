@@ -1094,6 +1094,9 @@ impl WindowHandle {
         self.state.upgrade().unwrap().text.borrow().clone().unwrap()
     }
 
+    /// Set a dragable area in the window
+    pub fn set_dragable_area(&self, _area: Region) {}
+
     pub fn add_text_field(&self) -> TextFieldToken {
         TextFieldToken::next()
     }
