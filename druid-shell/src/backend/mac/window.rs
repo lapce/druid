@@ -1499,6 +1499,14 @@ impl WindowHandle {
         }
     }
 
+    pub fn is_fullscreen(&self) -> bool {
+        unsafe {
+            let window: id = msg_send![*self.nsview.load(), window];
+            window.styleMask() & NSWindowStyleMask::NSFullScreenWindowMask
+                == NSWindowStyleMask::NSFullScreenWindowMask
+        }
+    }
+
     pub fn get_window_state(&self) -> WindowState {
         unsafe {
             let window: id = msg_send![*self.nsview.load(), window];

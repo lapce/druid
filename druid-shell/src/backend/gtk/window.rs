@@ -1044,6 +1044,10 @@ impl WindowHandle {
         warn!("WindowHandle::handle_titlebar is currently unimplemented for gtk.");
     }
 
+    pub fn is_fullscreen(&self) -> bool {
+        false
+    }
+
     /// Close the window.
     pub fn close(&self) {
         if let Some(state) = self.state.upgrade() {

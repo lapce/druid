@@ -2001,6 +2001,10 @@ impl WindowHandle {
         }
     }
 
+    pub fn is_fullscreen(&self) -> bool {
+        false
+    }
+
     pub fn set_menu(&self, menu: Menu) {
         let accels = menu.accels();
         let hmenu = menu.into_hmenu();

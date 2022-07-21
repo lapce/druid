@@ -277,6 +277,11 @@ impl WindowHandle {
         self.0.get_size()
     }
 
+    /// Check if the windows is fullscreen
+    pub fn is_fullscreen(&self) -> bool {
+        self.0.is_fullscreen()
+    }
+
     /// Bring this window to the front of the window stack and give it focus.
     pub fn bring_to_front_and_focus(&self) {
         self.0.bring_to_front_and_focus()
