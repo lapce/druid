@@ -229,6 +229,7 @@ pub(crate) struct WindowState {
     in_draw: Cell<bool>,
 
     parent: Option<crate::WindowHandle>,
+    dragable_area: RefCell<Region>,
 }
 
 impl std::fmt::Debug for WindowState {
@@ -401,6 +402,7 @@ impl WindowBuilder {
             request_animation: Cell::new(false),
             in_draw: Cell::new(false),
             parent,
+            dragable_area: RefCell::new(Region::EMPTY),
         };
 
         let win_state = Arc::new(state);
@@ -572,6 +574,9 @@ impl WindowBuilder {
                             0
                         };
                         if gtk_count == 0 || gtk_count == 1 {
+                            if button.is_left()  && count == 1 && state.dragable_area.borrow().rects().iter().any(|rect| rect.contains(pos)) {
+                                state.window.begin_move_drag(event.button()as i32, event.root().0 as i32, event.root().1 as i32, event.time());
+                            }
                             handler.mouse_down(
                                 &MouseEvent {
                                     pos,
@@ -1099,7 +1104,9 @@ impl WindowHandle {
     }
 
     /// Set a dragable area in the window
-    pub fn set_dragable_area(&self, _area: Region) {}
+    pub fn set_dragable_area(&self, area: Region) {
+        *self.state.upgrade().unwrap().dragable_area.borrow_mut() = area;
+    }
 
     pub fn add_text_field(&self) -> TextFieldToken {
         TextFieldToken::next()
