@@ -23,9 +23,9 @@ use std::time::Instant;
 
 use block::ConcreteBlock;
 use cocoa::appkit::{
-    self, CGFloat, NSApp, NSApplication, NSAutoresizingMaskOptions, NSBackingStoreBuffered,
-    NSColor, NSEvent, NSOpenGLContext, NSScreen, NSToolbar, NSView, NSViewHeightSizable,
-    NSViewWidthSizable, NSWindow, NSWindowStyleMask,
+    self, CGFloat, NSApp, NSApplication, NSApplicationPresentationOptions,
+    NSAutoresizingMaskOptions, NSBackingStoreBuffered, NSColor, NSEvent, NSOpenGLContext, NSScreen,
+    NSToolbar, NSView, NSViewHeightSizable, NSViewWidthSizable, NSWindow, NSWindowStyleMask,
 };
 use cocoa::base::{id, nil, BOOL, NO, YES};
 use cocoa::foundation::{
@@ -420,6 +420,21 @@ lazy_static! {
         extern "C" fn acceptsFirstResponder(_this: &Object, _sel: Sel) -> BOOL {
             YES
         }
+
+        decl.add_method(
+            sel!(window:willUseFullScreenPresentationOptions:),
+            will_use_full_screen_presentation_options
+                as extern "C" fn(&Object, Sel, *mut c_void, NSUInteger) -> NSUInteger,
+        );
+        extern "C" fn will_use_full_screen_presentation_options(
+            _this: &Object,
+            _sel: Sel,
+            _v: *mut c_void,
+            _options: NSUInteger,
+        ) -> NSUInteger {
+            1 << 11 | 1 << 2 | 1 << 10
+        }
+
         // acceptsFirstMouse is called when a left mouse click would focus the window
         decl.add_method(
             sel!(acceptsFirstMouse:),
