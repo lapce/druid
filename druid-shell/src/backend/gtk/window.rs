@@ -222,6 +222,7 @@ pub(crate) struct WindowState {
     idle_queue: Arc<Mutex<Vec<IdleKind>>>,
     current_keycode: Cell<Option<u16>>,
     click_counter: ClickCounter,
+    last_click_down_count: RefCell<u8>,
     active_text_input: Cell<Option<TextFieldToken>>,
     deferred_queue: RefCell<Vec<DeferredOp>>,
 
@@ -397,6 +398,7 @@ impl WindowBuilder {
             idle_queue: Arc::new(Mutex::new(vec![])),
             current_keycode: Cell::new(None),
             click_counter: ClickCounter::default(),
+            last_click_down_count: RefCell::new(0),
             active_text_input: Cell::new(None),
             deferred_queue: RefCell::new(Vec::new()),
             request_animation: Cell::new(false),
@@ -577,6 +579,7 @@ impl WindowBuilder {
                             if button.is_left()  && count == 1 && state.dragable_area.borrow().rects().iter().any(|rect| rect.contains(pos)) {
                                 state.window.begin_move_drag(event.button()as i32, event.root().0 as i32, event.root().1 as i32, event.time());
                             }
+                            *state.last_click_down_count.borrow_mut() = count;
                             handler.mouse_down(
                                 &MouseEvent {
                                     pos,
@@ -601,12 +604,13 @@ impl WindowBuilder {
                 state.with_handler(|handler| {
                     if let Some(button) = get_mouse_button(event.button()) {
                         let button_state = event.state();
+                        let count = *state.last_click_down_count.borrow();
                         handler.mouse_up(
                             &MouseEvent {
                                 pos: Point::from(event.position()),
                                 buttons: get_mouse_buttons_from_modifiers(button_state).without(button),
                                 mods: get_modifiers(button_state),
-                                count: 0,
+                                count,
                                 focus: false,
                                 button,
                                 wheel_delta: Vec2::ZERO
