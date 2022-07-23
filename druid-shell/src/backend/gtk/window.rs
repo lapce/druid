@@ -35,6 +35,7 @@ use gtk::glib::translate::FromGlib;
 use gtk::prelude::*;
 use gtk::traits::SettingsExt;
 use gtk::{AccelGroup, ApplicationWindow};
+use gtk_rs::gdk::WindowEdge;
 use gtk_rs::GLArea;
 use instant::Duration;
 use piet_wgpu::WgpuRenderer;
@@ -576,8 +577,14 @@ impl WindowBuilder {
                             0
                         };
                         if gtk_count == 0 || gtk_count == 1 {
-                            if button.is_left()  && count == 1 && state.dragable_area.borrow().rects().iter().any(|rect| rect.contains(pos)) {
-                                state.window.begin_move_drag(event.button()as i32, event.root().0 as i32, event.root().1 as i32, event.time());
+                            if button.is_left() && count == 1 {
+                                let (width, height) = state.window.size();
+                                if let Some(edge) = mouse_at_edge(width as f64, height as f64, pos.x, pos.y) {
+                                    state.window.begin_resize_drag(edge, event.button()as i32, event.root().0 as i32, event.root().1 as i32, event.time());
+                                    return;
+                                } else if state.dragable_area.borrow().rects().iter().any(|rect| rect.contains(pos)) {
+                                    state.window.begin_move_drag(event.button()as i32, event.root().0 as i32, event.root().1 as i32, event.time());
+                                }
                             }
                             *state.last_click_down_count.borrow_mut() = count;
                             handler.mouse_down(
@@ -628,8 +635,9 @@ impl WindowBuilder {
             .connect_motion_notify_event(clone!(handle => move |_widget, motion| {
                 if let Some(state) = handle.state.upgrade() {
                     let motion_state = motion.state();
+                    let pos = Point::from(motion.position());
                     let mouse_event = MouseEvent {
-                        pos: Point::from(motion.position()),
+                        pos,
                         buttons: get_mouse_buttons_from_modifiers(motion_state),
                         mods: get_modifiers(motion_state),
                         count: 0,
@@ -639,6 +647,27 @@ impl WindowBuilder {
                     };
 
                     state.with_handler(|h| h.mouse_move(&mouse_event));
+
+                    let (width, height) = state.window.size();
+                    if let Some(edge) = mouse_at_edge(width as f64, height as f64, pos.x, pos.y) {
+                        if let Some(gdk_window) = state.window.window() {
+                            let cursor = gtk::gdk::Cursor::from_name(
+                                &gdk_window.display(),
+                                match edge {
+                                    WindowEdge::NorthWest => "nw-resize",
+                                    WindowEdge::NorthEast => "ne-resize",
+                                    WindowEdge::SouthWest => "sw-resize",
+                                    WindowEdge::SouthEast => "se-resize",
+                                    WindowEdge::South => "s-resize",
+                                    WindowEdge::North => "n-resize",
+                                    WindowEdge::East => "e-resize",
+                                    WindowEdge::West => "w-resize",
+                                    _ => unreachable!(),
+                                },
+                            );
+                            gdk_window.set_cursor(cursor.as_ref());
+                        }
+                    }
                 }
 
                 Inhibit(true)
@@ -1495,5 +1524,28 @@ fn hardware_keycode_to_keyval(keycode: u16) -> Option<keycodes::RawKey> {
         } else {
             None
         }
+    }
+}
+
+fn mouse_at_edge(width: f64, height: f64, x: f64, y: f64) -> Option<WindowEdge> {
+    let padding = 5.0;
+    if x < padding && y < padding {
+        Some(WindowEdge::NorthWest)
+    } else if x < padding && y > height - padding {
+        Some(WindowEdge::SouthWest)
+    } else if x > width - padding && y < padding {
+        Some(WindowEdge::NorthEast)
+    } else if x > width - padding && y > height - padding {
+        Some(WindowEdge::SouthEast)
+    } else if y < padding {
+        Some(WindowEdge::North)
+    } else if x < padding {
+        Some(WindowEdge::West)
+    } else if y > height - padding {
+        Some(WindowEdge::South)
+    } else if x > width - padding {
+        Some(WindowEdge::East)
+    } else {
+        None
     }
 }
