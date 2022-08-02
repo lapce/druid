@@ -18,7 +18,7 @@
 // bitflags implementation of the inner Modifiers type.
 #![allow(clippy::trivially_copy_pass_by_ref)]
 
-use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not};
+use std::ops::{BitAnd, BitAndAssign, BitOr, BitOrAssign, BitXor, BitXorAssign, Not, Sub};
 
 pub use keyboard_types::{Code, KeyState, Location};
 
@@ -153,6 +153,14 @@ impl Modifiers {
     /// Inserts or removes the specified modifiers depending on the passed value.
     pub fn set(&mut self, other: Modifiers, value: bool) {
         self.0.set(other.0, value)
+    }
+}
+
+impl Sub for Modifiers {
+    type Output = Self;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        Modifiers(self.0 - rhs.0)
     }
 }
 
