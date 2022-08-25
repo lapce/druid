@@ -209,13 +209,6 @@ impl<T, W: Widget<T>> WidgetPod<T, W> {
         &self.state
     }
 
-    /// Clear the initilized state
-    pub fn clear_initialized(&mut self) {
-        self.old_data = None;
-        self.state.children_changed = true;
-        self.state.needs_layout = true;
-    }
-
     /// Returns `true` if the widget has received [`LifeCycle::WidgetAdded`].
     ///
     /// [`LifeCycle::WidgetAdded`]: ./enum.LifeCycle.html#variant.WidgetAdded
@@ -1032,7 +1025,7 @@ impl<T: Data, W: Widget<T>> WidgetPod<T, W> {
                 }
             },
             LifeCycle::WidgetAdded => {
-                assert!(self.old_data.is_none());
+                // assert!(self.old_data.is_none());
                 trace!("Received LifeCycle::WidgetAdded");
 
                 self.state.update_focus_chain = true;
