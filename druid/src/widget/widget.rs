@@ -239,6 +239,12 @@ impl WidgetId {
         WidgetId(WIDGET_ID_COUNTER.next_nonzero())
     }
 
+    /// Create a WidgeId from usize
+    #[allow(unsafe_code)]
+    pub fn from_usize(id: usize) -> WidgetId {
+        WidgetId(unsafe { std::num::NonZeroU64::new_unchecked(id as u64) })
+    }
+
     /// Create a reserved `WidgetId`, suitable for reuse.
     ///
     /// The caller is responsible for ensuring that this ID is in fact assigned
