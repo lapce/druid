@@ -716,4 +716,9 @@ impl WindowId {
     pub fn from_usize(id: usize) -> WindowId {
         WindowId(id as u64)
     }
+
+    /// window id to usize
+    pub fn as_usize(&self) -> usize {
+        self.0 as usize
+    }
 }

@@ -245,6 +245,11 @@ impl WidgetId {
         WidgetId(unsafe { std::num::NonZeroU64::new_unchecked(id as u64) })
     }
 
+    /// WidgetId to usize
+    pub fn to_usize(&self) -> usize {
+        self.0.get() as usize
+    }
+
     /// Create a reserved `WidgetId`, suitable for reuse.
     ///
     /// The caller is responsible for ensuring that this ID is in fact assigned
