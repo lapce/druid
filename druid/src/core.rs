@@ -726,7 +726,8 @@ impl<T: Data, W: Widget<T>> WidgetPod<T, W> {
             },
             Event::ApplicationWillTerminate
             | Event::WindowConnected
-            | Event::WindowCloseRequested => true,
+            | Event::WindowCloseRequested
+            | Event::WindowGotFocus(_) => true,
             Event::WindowDisconnected => {
                 for (window_id, _) in &self.state.sub_window_hosts {
                     ctx.submit_command(CLOSE_WINDOW.to(*window_id))

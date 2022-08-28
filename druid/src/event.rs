@@ -20,7 +20,7 @@ use druid_shell::kurbo::Point;
 use druid_shell::{Clipboard, KeyEvent, TimerToken};
 
 use crate::mouse::MouseEvent;
-use crate::{Command, Notification, WidgetId};
+use crate::{Command, Notification, WidgetId, WindowId};
 
 /// An event, propagated downwards during event flow.
 ///
@@ -79,6 +79,8 @@ pub enum Event {
     /// This event means the window *will* go away; it is safe to dispose of resources and
     /// do any other cleanup.
     WindowDisconnected,
+    /// The event when window got focus
+    WindowGotFocus(WindowId),
     /// Called on the root widget when the window size changes.
     ///
     /// Discussion: it's not obvious this should be propagated to user
@@ -439,6 +441,7 @@ impl Event {
             | Event::WindowConnected
             | Event::WindowCloseRequested
             | Event::WindowDisconnected
+            | Event::WindowGotFocus(_)
             | Event::WindowSize(_)
             | Event::WindowPosition(_)
             | Event::Timer(_)

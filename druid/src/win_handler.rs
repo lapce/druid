@@ -578,7 +578,8 @@ impl<T: Data> AppState<T> {
     }
 
     fn window_got_focus(&mut self, window_id: WindowId) {
-        self.inner.borrow_mut().window_got_focus(window_id)
+        self.inner.borrow_mut().window_got_focus(window_id);
+        self.do_window_event(Event::WindowGotFocus(window_id), window_id);
     }
 
     /// Send an event to the widget hierarchy.
