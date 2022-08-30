@@ -55,6 +55,8 @@ pub enum Event {
     ///
     /// This is a good place to do cleanup
     ApplicationWillTerminate,
+    /// Sent to Delegate that the Dock icon is clicked on macOS
+    ApplicationShouldHandleReopen(bool),
     /// Sent to all widgets in a given window when that window is first instantiated.
     ///
     /// This should always be the first `Event` received, although widgets will
@@ -438,6 +440,7 @@ impl Event {
     pub fn should_propagate_to_hidden(&self) -> bool {
         match self {
             Event::ApplicationWillTerminate
+            | Event::ApplicationShouldHandleReopen(_)
             | Event::WindowConnected
             | Event::WindowCloseRequested
             | Event::WindowDisconnected

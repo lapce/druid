@@ -896,6 +896,13 @@ impl<T: Data> AppState<T> {
             .delegate_event(WindowId::next(), Event::ApplicationWillTerminate);
     }
 
+    fn should_handle_reopen(&self, has_visible_windows: bool) {
+        self.inner.borrow_mut().delegate_event(
+            WindowId::next(),
+            Event::ApplicationShouldHandleReopen(has_visible_windows),
+        );
+    }
+
     fn quit(&self) {
         self.application_will_terminate();
         self.inner.borrow().app.quit()
@@ -952,6 +959,10 @@ impl<T: Data> crate::shell::AppHandler for AppHandler<T> {
 
     fn will_terminate(&mut self) {
         self.app_state.application_will_terminate();
+    }
+
+    fn should_handle_reopen(&mut self, has_visible_windows: bool) {
+        self.app_state.should_handle_reopen(has_visible_windows);
     }
 }
 

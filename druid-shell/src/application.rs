@@ -42,6 +42,8 @@ pub trait AppHandler {
     fn command(&mut self, id: u32) {}
 
     fn will_terminate(&mut self) {}
+
+    fn should_handle_reopen(&mut self, has_visible_windows: bool) {}
 }
 
 /// The top level application object.

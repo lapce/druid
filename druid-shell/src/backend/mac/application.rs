@@ -21,7 +21,7 @@ use std::ffi::c_void;
 use std::rc::Rc;
 
 use cocoa::appkit::{NSApp, NSApplication, NSApplicationActivationPolicyRegular};
-use cocoa::base::{id, nil, NO, YES};
+use cocoa::base::{id, nil, BOOL, NO, YES};
 use cocoa::foundation::{NSArray, NSAutoreleasePool};
 use lazy_static::lazy_static;
 use objc::declare::ClassDecl;
@@ -158,6 +158,12 @@ impl DelegateState {
             inner.will_terminate()
         }
     }
+
+    fn should_handle_reopen(&mut self, has_visible_windows: bool) {
+        if let Some(inner) = self.handler.as_mut() {
+            inner.should_handle_reopen(has_visible_windows)
+        }
+    }
 }
 
 struct AppDelegate(*const Class);
@@ -181,6 +187,10 @@ lazy_static! {
         decl.add_method(
             sel!(applicationWillTerminate:),
             will_terminate as extern "C" fn(&mut Object, Sel, id),
+        );
+        decl.add_method(
+            sel!(applicationShouldHandleReopen:hasVisibleWindows:),
+            application_should_handle_reopen as extern "C" fn(&mut Object, Sel, id, BOOL) -> BOOL,
         );
 
         AppDelegate(decl.register())
@@ -213,4 +223,18 @@ extern "C" fn will_terminate(this: &mut Object, _: Sel, item: id) {
         let inner = &mut *(inner as *mut DelegateState);
         (*inner).will_terminate();
     }
+}
+
+extern "C" fn application_should_handle_reopen(
+    this: &mut Object,
+    _: Sel,
+    _: id,
+    has_visible_windows: BOOL,
+) -> BOOL {
+    unsafe {
+        let inner: *mut c_void = *this.get_ivar(APP_HANDLER_IVAR);
+        let inner = &mut *(inner as *mut DelegateState);
+        (*inner).should_handle_reopen(has_visible_windows == YES);
+    }
+    YES
 }

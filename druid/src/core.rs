@@ -725,6 +725,7 @@ impl<T: Data, W: Widget<T>> WidgetPod<T, W> {
                 }
             },
             Event::ApplicationWillTerminate
+            | Event::ApplicationShouldHandleReopen(_)
             | Event::WindowConnected
             | Event::WindowCloseRequested
             | Event::WindowGotFocus(_) => true,
