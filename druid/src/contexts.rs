@@ -247,6 +247,11 @@ impl_context_method!(
             self.widget_state.is_active
         }
 
+        /// The (tree) active status of a widget.
+        pub fn has_active(&self) -> bool {
+            self.widget_state.has_active
+        }
+
         /// The focus status of a widget.
         ///
         /// Returns `true` if this specific widget is focused.

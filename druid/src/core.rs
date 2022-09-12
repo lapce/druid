@@ -130,7 +130,7 @@ pub struct WidgetState {
     pub(crate) needs_window_origin: bool,
 
     /// Any descendant is active.
-    has_active: bool,
+    pub(crate) has_active: bool,
 
     /// In the focused path, starting from window and ending at the focused widget.
     /// Descendants of the focused widget are not in the focused path.
