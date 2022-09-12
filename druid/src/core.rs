@@ -1317,22 +1317,20 @@ impl WidgetState {
         // things will be recalculated just from `cursor_change`.
         if is_mouse {
             let child_cursor = child_state.take_cursor();
-            if let CursorChange::Override(cursor) = &self.cursor_change {
-                self.cursor = Some(cursor.clone());
-                self.cursor_from_child = false;
-            } else if (child_state.has_active || child_state.is_hot)
-                && (self.cursor.is_none() || !self.cursor_from_child)
-            {
-                self.cursor = child_cursor;
-                self.cursor_from_child = true;
-            }
-
-            if self.cursor.is_none() {
-                if let CursorChange::Set(cursor) = &self.cursor_change {
+            match &self.cursor_change {
+                CursorChange::Override(cursor) | CursorChange::Set(cursor) => {
                     self.cursor = Some(cursor.clone());
                     self.cursor_from_child = false;
                 }
-            }
+                CursorChange::Default => {
+                    if (child_state.has_active || child_state.is_hot)
+                        && (self.cursor.is_none() || !self.cursor_from_child)
+                    {
+                        self.cursor = child_cursor;
+                        self.cursor_from_child = true;
+                    }
+                }
+            };
         }
     }
 
