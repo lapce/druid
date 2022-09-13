@@ -663,10 +663,16 @@ impl<T: Data, W: Widget<T>> WidgetPod<T, W> {
         }
 
         // TODO: factor as much logic as possible into monomorphic functions.
-        if ctx.is_handled {
+        if ctx.is_handled
+            && !matches!(
+                event,
+                Event::MouseDown(_) | Event::MouseUp(_) | Event::MouseMove(_) | Event::Wheel(_)
+            )
+        {
             // This function is called by containers to propagate an event from
             // containers to children. Non-recurse events will be invoked directly
             // from other points in the library.
+            ctx.widget_state.merge_up(&mut self.state, event.is_mouse());
             return;
         }
         let had_active = self.state.has_active;
@@ -840,7 +846,7 @@ impl<T: Data, W: Widget<T>> WidgetPod<T, W> {
                 state: ctx.state,
                 widget_state: &mut self.state,
                 notifications: &mut notifications,
-                is_handled: false,
+                is_handled: ctx.is_handled,
                 is_root: false,
             };
             let inner_event = modified_event.as_ref().unwrap_or(event);
@@ -1325,6 +1331,7 @@ impl WidgetState {
                 CursorChange::Default => {
                     if (child_state.has_active || child_state.is_hot)
                         && (self.cursor.is_none() || !self.cursor_from_child)
+                        && child_cursor.is_some()
                     {
                         self.cursor = child_cursor;
                         self.cursor_from_child = true;
