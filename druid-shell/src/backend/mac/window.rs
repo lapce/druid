@@ -637,7 +637,7 @@ fn make_view(
     renderer: WgpuRenderer,
 ) -> id {
     unsafe {
-        let view: id = msg_send![VIEW_CLASS.0, alloc];
+        let view: id = msg_send![VIEW_CLASS.0, new];
         let options: NSAutoresizingMaskOptions = NSViewWidthSizable | NSViewHeightSizable;
         view.setAutoresizingMask_(options);
 
