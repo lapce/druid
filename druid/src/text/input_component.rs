@@ -864,6 +864,12 @@ impl<T: TextStorage + EditableText> InputHandler for EditSessionHandle<T> {
         self.text.cursor(i).is_some()
     }
 
+    fn insert_text(&mut self, _text: &str) {}
+
+    fn is_active(&self) -> bool {
+        true
+    }
+
     fn len(&self) -> usize {
         self.text.len()
     }

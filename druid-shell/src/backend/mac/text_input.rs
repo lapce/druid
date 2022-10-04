@@ -205,6 +205,7 @@ pub extern "C" fn insert_text(this: &mut Object, _: Sel, text: id, replacement_r
             .unwrap_or_else(|| edit_lock.selection().range());
 
         edit_lock.replace_range(converted_range.clone(), text_string);
+        edit_lock.insert_text(text_string);
         edit_lock.set_composition_range(None);
         // move the caret next to the inserted text
         let caret_index = converted_range.start + text_string.len();
@@ -262,349 +263,350 @@ pub extern "C" fn first_rect_for_character_range(
 }
 
 pub extern "C" fn do_command_by_selector(this: &mut Object, _: Sel, cmd: Sel) {
-    if with_edit_lock_from_window(this, true, |lock| do_command_by_selector_impl(lock, cmd))
-        .is_none()
-    {
-        // this is not a text field, so forward command to parent
-        if let Some(superclass) = this.class().superclass() {
-            unsafe { msg_send![superclass, doCommandBySelector: cmd] }
-        }
-    }
+    // println!("ime do command");
+    // if with_edit_lock_from_window(this, true, |lock| do_command_by_selector_impl(lock, cmd))
+    //     .is_none()
+    // {
+    //     // this is not a text field, so forward command to parent
+    //     if let Some(superclass) = this.class().superclass() {
+    //         unsafe { msg_send![superclass, doCommandBySelector: cmd] }
+    //     }
+    // }
 }
 
-fn do_command_by_selector_impl(mut edit_lock: Box<dyn InputHandler>, cmd: Sel) {
-    match cmd.name() {
-        // see https://developer.apple.com/documentation/appkit/nsstandardkeybindingresponding?language=objc
-        // and https://support.apple.com/en-us/HT201236
-        // and https://support.apple.com/lv-lv/guide/mac-help/mh21243/mac
-        "centerSelectionInVisibleArea:" => edit_lock.handle_action(Action::ScrollToSelection),
-        "deleteBackward:" => {
-            edit_lock.handle_action(Action::Delete(Movement::Grapheme(Direction::Upstream)))
-        }
-        "deleteBackwardByDecomposingPreviousCharacter:" => {
-            edit_lock.handle_action(Action::DecomposingBackspace)
-        }
-        "deleteForward:" => {
-            edit_lock.handle_action(Action::Delete(Movement::Grapheme(Direction::Downstream)))
-        }
-        "deleteToBeginningOfLine:" => {
-            edit_lock.handle_action(Action::Delete(Movement::Line(Direction::Upstream)))
-        }
-        "deleteToBeginningOfParagraph:" => {
-            // TODO(lord): this seems to also kill the text into a buffer that can get pasted with yank
-            edit_lock.handle_action(Action::Delete(Movement::ParagraphStart))
-        }
-        "deleteToEndOfLine:" => {
-            edit_lock.handle_action(Action::Delete(Movement::Line(Direction::Downstream)))
-        }
-        "deleteToEndOfParagraph:" => {
-            // TODO(lord): this seems to also kill the text into a buffer that can get pasted with yank
-            edit_lock.handle_action(Action::Delete(Movement::ParagraphEnd))
-        }
-        "deleteWordBackward:" => {
-            edit_lock.handle_action(Action::Delete(Movement::Word(Direction::Upstream)))
-        }
-        "deleteWordForward:" => {
-            edit_lock.handle_action(Action::Delete(Movement::Word(Direction::Downstream)))
-        }
-        "insertBacktab:" => edit_lock.handle_action(Action::InsertBacktab),
-        "insertLineBreak:" => edit_lock.handle_action(Action::InsertNewLine {
-            ignore_hotkey: false,
-            newline_type: '\u{2028}',
-        }),
-        "insertNewline:" => edit_lock.handle_action(Action::InsertNewLine {
-            ignore_hotkey: false,
-            newline_type: '\n',
-        }),
-        "insertNewlineIgnoringFieldEditor:" => edit_lock.handle_action(Action::InsertNewLine {
-            ignore_hotkey: true,
-            newline_type: '\n',
-        }),
-        "insertParagraphSeparator:" => edit_lock.handle_action(Action::InsertNewLine {
-            ignore_hotkey: false,
-            newline_type: '\u{2029}',
-        }),
-        "insertTab:" => edit_lock.handle_action(Action::InsertTab {
-            ignore_hotkey: false,
-        }),
-        "insertTabIgnoringFieldEditor:" => edit_lock.handle_action(Action::InsertTab {
-            ignore_hotkey: true,
-        }),
-        "makeBaseWritingDirectionLeftToRight:" => edit_lock.handle_action(
-            Action::SetParagraphWritingDirection(WritingDirection::LeftToRight),
-        ),
-        "makeBaseWritingDirectionNatural:" => edit_lock.handle_action(
-            Action::SetParagraphWritingDirection(WritingDirection::Natural),
-        ),
-        "makeBaseWritingDirectionRightToLeft:" => edit_lock.handle_action(
-            Action::SetParagraphWritingDirection(WritingDirection::RightToLeft),
-        ),
-        "makeTextWritingDirectionLeftToRight:" => edit_lock.handle_action(
-            Action::SetSelectionWritingDirection(WritingDirection::LeftToRight),
-        ),
-        "makeTextWritingDirectionNatural:" => edit_lock.handle_action(
-            Action::SetSelectionWritingDirection(WritingDirection::Natural),
-        ),
-        "makeTextWritingDirectionRightToLeft:" => edit_lock.handle_action(
-            Action::SetSelectionWritingDirection(WritingDirection::RightToLeft),
-        ),
-        "moveBackward:" => {
-            edit_lock.handle_action(Action::Move(Movement::Grapheme(Direction::Upstream)))
-        }
-        "moveBackwardAndModifySelection:" => edit_lock.handle_action(Action::MoveSelecting(
-            Movement::Grapheme(Direction::Upstream),
-        )),
-        "moveDown:" => {
-            edit_lock.handle_action(Action::Move(Movement::Vertical(VerticalMovement::LineDown)))
-        }
-        "moveDownAndModifySelection:" => edit_lock.handle_action(Action::MoveSelecting(
-            Movement::Vertical(VerticalMovement::LineDown),
-        )),
-        "moveForward:" => {
-            edit_lock.handle_action(Action::Move(Movement::Grapheme(Direction::Downstream)))
-        }
-        "moveForwardAndModifySelection:" => edit_lock.handle_action(Action::MoveSelecting(
-            Movement::Grapheme(Direction::Downstream),
-        )),
-        "moveLeft:" => edit_lock.handle_action(Action::Move(Movement::Grapheme(Direction::Left))),
-        "moveLeftAndModifySelection:" => {
-            edit_lock.handle_action(Action::MoveSelecting(Movement::Grapheme(Direction::Left)))
-        }
-        "moveParagraphBackwardAndModifySelection:" => {
-            let selection = edit_lock.selection();
-            let is_active_after_anchor = selection.active > selection.anchor;
-            edit_lock.handle_action(Action::MoveSelecting(Movement::Grapheme(
-                Direction::Upstream,
-            )));
-            edit_lock.handle_action(Action::MoveSelecting(Movement::ParagraphStart));
-            if is_active_after_anchor && selection.active <= selection.anchor {
-                // textedit testing showed that this operation never fully inverts a selection; if this action
-                // would cause a selection's active and anchor to swap order, it makes a caret instead. applying
-                // the operation a second time (on the selection that is now a caret) is required to invert.
-                edit_lock.set_selection(Selection::caret(selection.anchor));
-            }
-        }
-        "moveParagraphForwardAndModifySelection:" => {
-            let selection = edit_lock.selection();
-            let is_anchor_after_active = selection.active < selection.anchor;
-            edit_lock.handle_action(Action::MoveSelecting(Movement::Grapheme(
-                Direction::Downstream,
-            )));
-            edit_lock.handle_action(Action::MoveSelecting(Movement::ParagraphEnd));
-            if is_anchor_after_active && selection.active >= selection.anchor {
-                // textedit testing showed that this operation never fully inverts a selection; if this action
-                // would cause a selection's active and anchor to swap order, it makes a caret instead. applying
-                // the operation a second time (on the selection that is now a caret) is required to invert.
-                edit_lock.set_selection(Selection::caret(selection.anchor));
-            }
-        }
-        "moveRight:" => edit_lock.handle_action(Action::Move(Movement::Grapheme(Direction::Right))),
-        "moveRightAndModifySelection:" => {
-            edit_lock.handle_action(Action::MoveSelecting(Movement::Grapheme(Direction::Right)))
-        }
-        "moveToBeginningOfDocument:" => edit_lock.handle_action(Action::Move(Movement::Vertical(
-            VerticalMovement::DocumentStart,
-        ))),
-        "moveToBeginningOfDocumentAndModifySelection:" => edit_lock.handle_action(
-            Action::MoveSelecting(Movement::Vertical(VerticalMovement::DocumentStart)),
-        ),
-        "moveToBeginningOfLine:" => {
-            edit_lock.handle_action(Action::Move(Movement::Line(Direction::Upstream)))
-        }
-        "moveToBeginningOfLineAndModifySelection:" => {
-            edit_lock.handle_action(Action::MoveSelecting(Movement::Line(Direction::Upstream)))
-        }
-        "moveToBeginningOfParagraph:" => {
-            // initially, it may seem like this and moveToEndOfParagraph shouldn't be idempotent. after all,
-            // option-up and option-down aren't idempotent, and those seem to call this method. however, on
-            // further inspection, you can find that option-up first calls `moveBackward` before calling this.
-            // if you send the raw command to TextEdit by editing your `DefaultKeyBinding.dict`, you can find
-            // that this operation is in fact idempotent.
-            edit_lock.handle_action(Action::Move(Movement::ParagraphStart))
-        }
-        "moveToBeginningOfParagraphAndModifySelection:" => {
-            edit_lock.handle_action(Action::MoveSelecting(Movement::ParagraphStart))
-        }
-        "moveToEndOfDocument:" => edit_lock.handle_action(Action::Move(Movement::Vertical(
-            VerticalMovement::DocumentEnd,
-        ))),
-        "moveToEndOfDocumentAndModifySelection:" => edit_lock.handle_action(Action::MoveSelecting(
-            Movement::Vertical(VerticalMovement::DocumentEnd),
-        )),
-        "moveToEndOfLine:" => {
-            edit_lock.handle_action(Action::Move(Movement::Line(Direction::Downstream)))
-        }
-        "moveToEndOfLineAndModifySelection:" => {
-            edit_lock.handle_action(Action::MoveSelecting(Movement::Line(Direction::Downstream)))
-        }
-        "moveToEndOfParagraph:" => edit_lock.handle_action(Action::Move(Movement::ParagraphEnd)),
-        "moveToEndOfParagraphAndModifySelection:" => {
-            edit_lock.handle_action(Action::MoveSelecting(Movement::ParagraphEnd))
-        }
-        "moveToLeftEndOfLine:" => {
-            edit_lock.handle_action(Action::Move(Movement::Line(Direction::Left)))
-        }
-        "moveToLeftEndOfLineAndModifySelection:" => {
-            edit_lock.handle_action(Action::MoveSelecting(Movement::Line(Direction::Left)))
-        }
-        "moveToRightEndOfLine:" => {
-            edit_lock.handle_action(Action::Move(Movement::Line(Direction::Right)))
-        }
-        "moveToRightEndOfLineAndModifySelection:" => {
-            edit_lock.handle_action(Action::MoveSelecting(Movement::Line(Direction::Right)))
-        }
-        "moveUp:" => {
-            edit_lock.handle_action(Action::Move(Movement::Vertical(VerticalMovement::LineUp)))
-        }
-        "moveUpAndModifySelection:" => edit_lock.handle_action(Action::MoveSelecting(
-            Movement::Vertical(VerticalMovement::LineUp),
-        )),
-        "moveWordBackward:" => {
-            edit_lock.handle_action(Action::Move(Movement::Word(Direction::Upstream)))
-        }
-        "moveWordBackwardAndModifySelection:" => {
-            edit_lock.handle_action(Action::MoveSelecting(Movement::Word(Direction::Upstream)))
-        }
-        "moveWordForward:" => {
-            edit_lock.handle_action(Action::Move(Movement::Word(Direction::Downstream)))
-        }
-        "moveWordForwardAndModifySelection:" => {
-            edit_lock.handle_action(Action::MoveSelecting(Movement::Word(Direction::Downstream)))
-        }
-        "moveWordLeft:" => edit_lock.handle_action(Action::Move(Movement::Word(Direction::Left))),
-        "moveWordLeftAndModifySelection:" => {
-            edit_lock.handle_action(Action::MoveSelecting(Movement::Word(Direction::Left)))
-        }
-        "moveWordRight:" => edit_lock.handle_action(Action::Move(Movement::Word(Direction::Right))),
-        "moveWordRightAndModifySelection:" => {
-            edit_lock.handle_action(Action::MoveSelecting(Movement::Word(Direction::Right)))
-        }
-        "pageDown:" => {
-            edit_lock.handle_action(Action::Move(Movement::Vertical(VerticalMovement::PageDown)))
-        }
-        "pageDownAndModifySelection:" => edit_lock.handle_action(Action::MoveSelecting(
-            Movement::Vertical(VerticalMovement::PageDown),
-        )),
-        "pageUp:" => {
-            edit_lock.handle_action(Action::Move(Movement::Vertical(VerticalMovement::PageUp)))
-        }
-        "pageUpAndModifySelection:" => edit_lock.handle_action(Action::MoveSelecting(
-            Movement::Vertical(VerticalMovement::PageUp),
-        )),
-        "scrollLineDown:" => edit_lock.handle_action(Action::Scroll(VerticalMovement::LineDown)),
-        "scrollLineUp:" => edit_lock.handle_action(Action::Scroll(VerticalMovement::LineUp)),
-        "scrollPageDown:" => edit_lock.handle_action(Action::Scroll(VerticalMovement::PageDown)),
-        "scrollPageUp:" => edit_lock.handle_action(Action::Scroll(VerticalMovement::PageUp)),
-        "scrollToBeginningOfDocument:" => {
-            edit_lock.handle_action(Action::Scroll(VerticalMovement::DocumentStart))
-        }
-        "scrollToEndOfDocument:" => {
-            edit_lock.handle_action(Action::Scroll(VerticalMovement::DocumentEnd))
-        }
-        "selectAll:" => edit_lock.handle_action(Action::SelectAll),
-        "selectLine:" => edit_lock.handle_action(Action::SelectLine),
-        "selectParagraph:" => edit_lock.handle_action(Action::SelectParagraph),
-        "selectWord:" => edit_lock.handle_action(Action::SelectWord),
-        "transpose:" => {
-            // transpose is a tricky-to-implement-correctly mac-specific operation, and so we implement it using
-            // edit_lock commands directly instead of allowing applications to implement it directly through an
-            // action handler. it seems extremely unlikely anybody would want to override its behavior, anyway.
+// fn do_command_by_selector_impl(mut edit_lock: Box<dyn InputHandler>, cmd: Sel) {
+//     match cmd.name() {
+//         // see https://developer.apple.com/documentation/appkit/nsstandardkeybindingresponding?language=objc
+//         // and https://support.apple.com/en-us/HT201236
+//         // and https://support.apple.com/lv-lv/guide/mac-help/mh21243/mac
+//         "centerSelectionInVisibleArea:" => edit_lock.handle_action(Action::ScrollToSelection),
+//         "deleteBackward:" => {
+//             edit_lock.handle_action(Action::Delete(Movement::Grapheme(Direction::Upstream)))
+//         }
+//         "deleteBackwardByDecomposingPreviousCharacter:" => {
+//             edit_lock.handle_action(Action::DecomposingBackspace)
+//         }
+//         "deleteForward:" => {
+//             edit_lock.handle_action(Action::Delete(Movement::Grapheme(Direction::Downstream)))
+//         }
+//         "deleteToBeginningOfLine:" => {
+//             edit_lock.handle_action(Action::Delete(Movement::Line(Direction::Upstream)))
+//         }
+//         "deleteToBeginningOfParagraph:" => {
+//             // TODO(lord): this seems to also kill the text into a buffer that can get pasted with yank
+//             edit_lock.handle_action(Action::Delete(Movement::ParagraphStart))
+//         }
+//         "deleteToEndOfLine:" => {
+//             edit_lock.handle_action(Action::Delete(Movement::Line(Direction::Downstream)))
+//         }
+//         "deleteToEndOfParagraph:" => {
+//             // TODO(lord): this seems to also kill the text into a buffer that can get pasted with yank
+//             edit_lock.handle_action(Action::Delete(Movement::ParagraphEnd))
+//         }
+//         "deleteWordBackward:" => {
+//             edit_lock.handle_action(Action::Delete(Movement::Word(Direction::Upstream)))
+//         }
+//         "deleteWordForward:" => {
+//             edit_lock.handle_action(Action::Delete(Movement::Word(Direction::Downstream)))
+//         }
+//         "insertBacktab:" => edit_lock.handle_action(Action::InsertBacktab),
+//         "insertLineBreak:" => edit_lock.handle_action(Action::InsertNewLine {
+//             ignore_hotkey: false,
+//             newline_type: '\u{2028}',
+//         }),
+//         "insertNewline:" => edit_lock.handle_action(Action::InsertNewLine {
+//             ignore_hotkey: false,
+//             newline_type: '\n',
+//         }),
+//         "insertNewlineIgnoringFieldEditor:" => edit_lock.handle_action(Action::InsertNewLine {
+//             ignore_hotkey: true,
+//             newline_type: '\n',
+//         }),
+//         "insertParagraphSeparator:" => edit_lock.handle_action(Action::InsertNewLine {
+//             ignore_hotkey: false,
+//             newline_type: '\u{2029}',
+//         }),
+//         "insertTab:" => edit_lock.handle_action(Action::InsertTab {
+//             ignore_hotkey: false,
+//         }),
+//         "insertTabIgnoringFieldEditor:" => edit_lock.handle_action(Action::InsertTab {
+//             ignore_hotkey: true,
+//         }),
+//         "makeBaseWritingDirectionLeftToRight:" => edit_lock.handle_action(
+//             Action::SetParagraphWritingDirection(WritingDirection::LeftToRight),
+//         ),
+//         "makeBaseWritingDirectionNatural:" => edit_lock.handle_action(
+//             Action::SetParagraphWritingDirection(WritingDirection::Natural),
+//         ),
+//         "makeBaseWritingDirectionRightToLeft:" => edit_lock.handle_action(
+//             Action::SetParagraphWritingDirection(WritingDirection::RightToLeft),
+//         ),
+//         "makeTextWritingDirectionLeftToRight:" => edit_lock.handle_action(
+//             Action::SetSelectionWritingDirection(WritingDirection::LeftToRight),
+//         ),
+//         "makeTextWritingDirectionNatural:" => edit_lock.handle_action(
+//             Action::SetSelectionWritingDirection(WritingDirection::Natural),
+//         ),
+//         "makeTextWritingDirectionRightToLeft:" => edit_lock.handle_action(
+//             Action::SetSelectionWritingDirection(WritingDirection::RightToLeft),
+//         ),
+//         "moveBackward:" => {
+//             edit_lock.handle_action(Action::Move(Movement::Grapheme(Direction::Upstream)))
+//         }
+//         "moveBackwardAndModifySelection:" => edit_lock.handle_action(Action::MoveSelecting(
+//             Movement::Grapheme(Direction::Upstream),
+//         )),
+//         "moveDown:" => {
+//             edit_lock.handle_action(Action::Move(Movement::Vertical(VerticalMovement::LineDown)))
+//         }
+//         "moveDownAndModifySelection:" => edit_lock.handle_action(Action::MoveSelecting(
+//             Movement::Vertical(VerticalMovement::LineDown),
+//         )),
+//         "moveForward:" => {
+//             edit_lock.handle_action(Action::Move(Movement::Grapheme(Direction::Downstream)))
+//         }
+//         "moveForwardAndModifySelection:" => edit_lock.handle_action(Action::MoveSelecting(
+//             Movement::Grapheme(Direction::Downstream),
+//         )),
+//         "moveLeft:" => edit_lock.handle_action(Action::Move(Movement::Grapheme(Direction::Left))),
+//         "moveLeftAndModifySelection:" => {
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::Grapheme(Direction::Left)))
+//         }
+//         "moveParagraphBackwardAndModifySelection:" => {
+//             let selection = edit_lock.selection();
+//             let is_active_after_anchor = selection.active > selection.anchor;
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::Grapheme(
+//                 Direction::Upstream,
+//             )));
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::ParagraphStart));
+//             if is_active_after_anchor && selection.active <= selection.anchor {
+//                 // textedit testing showed that this operation never fully inverts a selection; if this action
+//                 // would cause a selection's active and anchor to swap order, it makes a caret instead. applying
+//                 // the operation a second time (on the selection that is now a caret) is required to invert.
+//                 edit_lock.set_selection(Selection::caret(selection.anchor));
+//             }
+//         }
+//         "moveParagraphForwardAndModifySelection:" => {
+//             let selection = edit_lock.selection();
+//             let is_anchor_after_active = selection.active < selection.anchor;
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::Grapheme(
+//                 Direction::Downstream,
+//             )));
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::ParagraphEnd));
+//             if is_anchor_after_active && selection.active >= selection.anchor {
+//                 // textedit testing showed that this operation never fully inverts a selection; if this action
+//                 // would cause a selection's active and anchor to swap order, it makes a caret instead. applying
+//                 // the operation a second time (on the selection that is now a caret) is required to invert.
+//                 edit_lock.set_selection(Selection::caret(selection.anchor));
+//             }
+//         }
+//         "moveRight:" => edit_lock.handle_action(Action::Move(Movement::Grapheme(Direction::Right))),
+//         "moveRightAndModifySelection:" => {
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::Grapheme(Direction::Right)))
+//         }
+//         "moveToBeginningOfDocument:" => edit_lock.handle_action(Action::Move(Movement::Vertical(
+//             VerticalMovement::DocumentStart,
+//         ))),
+//         "moveToBeginningOfDocumentAndModifySelection:" => edit_lock.handle_action(
+//             Action::MoveSelecting(Movement::Vertical(VerticalMovement::DocumentStart)),
+//         ),
+//         "moveToBeginningOfLine:" => {
+//             edit_lock.handle_action(Action::Move(Movement::Line(Direction::Upstream)))
+//         }
+//         "moveToBeginningOfLineAndModifySelection:" => {
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::Line(Direction::Upstream)))
+//         }
+//         "moveToBeginningOfParagraph:" => {
+//             // initially, it may seem like this and moveToEndOfParagraph shouldn't be idempotent. after all,
+//             // option-up and option-down aren't idempotent, and those seem to call this method. however, on
+//             // further inspection, you can find that option-up first calls `moveBackward` before calling this.
+//             // if you send the raw command to TextEdit by editing your `DefaultKeyBinding.dict`, you can find
+//             // that this operation is in fact idempotent.
+//             edit_lock.handle_action(Action::Move(Movement::ParagraphStart))
+//         }
+//         "moveToBeginningOfParagraphAndModifySelection:" => {
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::ParagraphStart))
+//         }
+//         "moveToEndOfDocument:" => edit_lock.handle_action(Action::Move(Movement::Vertical(
+//             VerticalMovement::DocumentEnd,
+//         ))),
+//         "moveToEndOfDocumentAndModifySelection:" => edit_lock.handle_action(Action::MoveSelecting(
+//             Movement::Vertical(VerticalMovement::DocumentEnd),
+//         )),
+//         "moveToEndOfLine:" => {
+//             edit_lock.handle_action(Action::Move(Movement::Line(Direction::Downstream)))
+//         }
+//         "moveToEndOfLineAndModifySelection:" => {
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::Line(Direction::Downstream)))
+//         }
+//         "moveToEndOfParagraph:" => edit_lock.handle_action(Action::Move(Movement::ParagraphEnd)),
+//         "moveToEndOfParagraphAndModifySelection:" => {
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::ParagraphEnd))
+//         }
+//         "moveToLeftEndOfLine:" => {
+//             edit_lock.handle_action(Action::Move(Movement::Line(Direction::Left)))
+//         }
+//         "moveToLeftEndOfLineAndModifySelection:" => {
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::Line(Direction::Left)))
+//         }
+//         "moveToRightEndOfLine:" => {
+//             edit_lock.handle_action(Action::Move(Movement::Line(Direction::Right)))
+//         }
+//         "moveToRightEndOfLineAndModifySelection:" => {
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::Line(Direction::Right)))
+//         }
+//         "moveUp:" => {
+//             edit_lock.handle_action(Action::Move(Movement::Vertical(VerticalMovement::LineUp)))
+//         }
+//         "moveUpAndModifySelection:" => edit_lock.handle_action(Action::MoveSelecting(
+//             Movement::Vertical(VerticalMovement::LineUp),
+//         )),
+//         "moveWordBackward:" => {
+//             edit_lock.handle_action(Action::Move(Movement::Word(Direction::Upstream)))
+//         }
+//         "moveWordBackwardAndModifySelection:" => {
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::Word(Direction::Upstream)))
+//         }
+//         "moveWordForward:" => {
+//             edit_lock.handle_action(Action::Move(Movement::Word(Direction::Downstream)))
+//         }
+//         "moveWordForwardAndModifySelection:" => {
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::Word(Direction::Downstream)))
+//         }
+//         "moveWordLeft:" => edit_lock.handle_action(Action::Move(Movement::Word(Direction::Left))),
+//         "moveWordLeftAndModifySelection:" => {
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::Word(Direction::Left)))
+//         }
+//         "moveWordRight:" => edit_lock.handle_action(Action::Move(Movement::Word(Direction::Right))),
+//         "moveWordRightAndModifySelection:" => {
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::Word(Direction::Right)))
+//         }
+//         "pageDown:" => {
+//             edit_lock.handle_action(Action::Move(Movement::Vertical(VerticalMovement::PageDown)))
+//         }
+//         "pageDownAndModifySelection:" => edit_lock.handle_action(Action::MoveSelecting(
+//             Movement::Vertical(VerticalMovement::PageDown),
+//         )),
+//         "pageUp:" => {
+//             edit_lock.handle_action(Action::Move(Movement::Vertical(VerticalMovement::PageUp)))
+//         }
+//         "pageUpAndModifySelection:" => edit_lock.handle_action(Action::MoveSelecting(
+//             Movement::Vertical(VerticalMovement::PageUp),
+//         )),
+//         "scrollLineDown:" => edit_lock.handle_action(Action::Scroll(VerticalMovement::LineDown)),
+//         "scrollLineUp:" => edit_lock.handle_action(Action::Scroll(VerticalMovement::LineUp)),
+//         "scrollPageDown:" => edit_lock.handle_action(Action::Scroll(VerticalMovement::PageDown)),
+//         "scrollPageUp:" => edit_lock.handle_action(Action::Scroll(VerticalMovement::PageUp)),
+//         "scrollToBeginningOfDocument:" => {
+//             edit_lock.handle_action(Action::Scroll(VerticalMovement::DocumentStart))
+//         }
+//         "scrollToEndOfDocument:" => {
+//             edit_lock.handle_action(Action::Scroll(VerticalMovement::DocumentEnd))
+//         }
+//         "selectAll:" => edit_lock.handle_action(Action::SelectAll),
+//         "selectLine:" => edit_lock.handle_action(Action::SelectLine),
+//         "selectParagraph:" => edit_lock.handle_action(Action::SelectParagraph),
+//         "selectWord:" => edit_lock.handle_action(Action::SelectWord),
+//         "transpose:" => {
+//             // transpose is a tricky-to-implement-correctly mac-specific operation, and so we implement it using
+//             // edit_lock commands directly instead of allowing applications to implement it directly through an
+//             // action handler. it seems extremely unlikely anybody would want to override its behavior, anyway.
 
-            // Swaps the graphemes before and after the caret, and then moves the caret downstream one grapheme. If the caret is at the
-            // end of a hard-wrapped line or document, act as though the caret was one grapheme upstream instead. If the caret is at the
-            // beginning of the document, this is a no-op. This is a no-op on non-caret selections (when `anchor != active`).
+//             // Swaps the graphemes before and after the caret, and then moves the caret downstream one grapheme. If the caret is at the
+//             // end of a hard-wrapped line or document, act as though the caret was one grapheme upstream instead. If the caret is at the
+//             // beginning of the document, this is a no-op. This is a no-op on non-caret selections (when `anchor != active`).
 
-            {
-                let selection = edit_lock.selection();
-                if !selection.is_caret() || selection.anchor == 0 {
-                    return;
-                }
-            }
+//             {
+//                 let selection = edit_lock.selection();
+//                 if !selection.is_caret() || selection.anchor == 0 {
+//                     return;
+//                 }
+//             }
 
-            // move caret to the end of the transpose region
-            {
-                let old_selection = edit_lock.selection();
-                edit_lock.handle_action(Action::MoveSelecting(Movement::Grapheme(
-                    Direction::Downstream,
-                )));
-                let new_selection = edit_lock.selection().range();
-                let next_grapheme = edit_lock.slice(new_selection.clone());
-                let next_char = next_grapheme.chars().next();
+//             // move caret to the end of the transpose region
+//             {
+//                 let old_selection = edit_lock.selection();
+//                 edit_lock.handle_action(Action::MoveSelecting(Movement::Grapheme(
+//                     Direction::Downstream,
+//                 )));
+//                 let new_selection = edit_lock.selection().range();
+//                 let next_grapheme = edit_lock.slice(new_selection.clone());
+//                 let next_char = next_grapheme.chars().next();
 
-                if next_char == Some('\n')
-                    || next_char == Some('\r')
-                    || next_char == Some('\u{2029}')
-                    || next_char == Some('\u{2028}')
-                    || next_char == None
-                {
-                    // next char is a newline or end of doc; so end of transpose range will actually be the starting selection.anchor
-                    edit_lock.set_selection(old_selection);
-                } else {
-                    // normally, end of transpose range will be next grapheme
-                    edit_lock.set_selection(Selection::caret(new_selection.end));
-                }
-            }
+//                 if next_char == Some('\n')
+//                     || next_char == Some('\r')
+//                     || next_char == Some('\u{2029}')
+//                     || next_char == Some('\u{2028}')
+//                     || next_char == None
+//                 {
+//                     // next char is a newline or end of doc; so end of transpose range will actually be the starting selection.anchor
+//                     edit_lock.set_selection(old_selection);
+//                 } else {
+//                     // normally, end of transpose range will be next grapheme
+//                     edit_lock.set_selection(Selection::caret(new_selection.end));
+//                 }
+//             }
 
-            // now find the previous two graphemes
-            edit_lock.handle_action(Action::MoveSelecting(Movement::Grapheme(
-                Direction::Upstream,
-            )));
-            let middle_idx = edit_lock.selection().active;
-            edit_lock.handle_action(Action::MoveSelecting(Movement::Grapheme(
-                Direction::Upstream,
-            )));
-            let selection = edit_lock.selection();
-            let first_grapheme = edit_lock.slice(selection.min()..middle_idx).into_owned();
-            let second_grapheme = edit_lock.slice(middle_idx..selection.max());
-            let new_string = format!("{}{}", second_grapheme, first_grapheme);
-            // replace_range should automatically set selection to end of inserted range
-            edit_lock.replace_range(selection.range(), &new_string);
-        }
-        "capitalizeWord:" => {
-            // this command expands the selection to words, and then applies titlecase to that selection
-            // not actually sure what keyboard shortcut corresponds to this or the other case changing commands,
-            // but textedit seems to have this behavior when this action is simulated by editing DefaultKeyBinding.dict.
-            edit_lock.handle_action(Action::SelectWord);
-            edit_lock.handle_action(Action::TitlecaseSelection)
-        }
-        "lowercaseWord:" => {
-            // this command expands the selection to words, and then applies uppercase to that selection
-            edit_lock.handle_action(Action::SelectWord);
-            edit_lock.handle_action(Action::LowercaseSelection);
-        }
-        "uppercaseWord:" => {
-            // this command expands the selection to words, and then applies uppercase to that selection
-            edit_lock.handle_action(Action::SelectWord);
-            edit_lock.handle_action(Action::UppercaseSelection);
-        }
-        "insertDoubleQuoteIgnoringSubstitution:" => {
-            edit_lock.handle_action(Action::InsertDoubleQuoteIgnoringSmartQuotes)
-        }
-        "insertSingleQuoteIgnoringSubstitution:" => {
-            edit_lock.handle_action(Action::InsertSingleQuoteIgnoringSmartQuotes)
-        }
-        "cancelOperation:" => edit_lock.handle_action(Action::Cancel),
-        // "deleteToMark:" => {}          // TODO(lord): selectToMark, then delete selection. also puts selection in yank buffer
-        // "selectToMark:" => {}          // TODO(lord): extends the selection to include the mark
-        // "setMark:" => {}               // TODO(lord): remembers index in document (but what about grapheme clusters??)
-        // "swapWithMark:" => {}          // TODO(lord): swaps current and stored mark indices
-        // "yank:" => {}                  // TODO(lord): triggered with control-y, inserts in the text previously killed deleteTo*OfParagraph
-        "transposeWords:" => {} // textedit doesn't support, so neither will we
-        "changeCaseOfLetter:" => {} // textedit doesn't support, so neither will we
-        "indent:" => {}         // textedit doesn't support, so neither will we
-        "insertContainerBreak:" => {} // textedit and pages don't seem to support, so neither will we
-        "quickLookPreviewItems:" => {} // don't seem to apply to text editing?? hopefully
-        // TODO(lord): reply to cmyr comment
-        "complete:" => {
-            // these are normally intercepted by the IME; if it gets to us, log
-            eprintln!("got an unexpected 'complete' text input command from macOS");
-        }
-        "noop:" => {}
-        e => {
-            eprintln!("unknown text editing command from macOS: {}", e);
-        }
-    };
-}
+//             // now find the previous two graphemes
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::Grapheme(
+//                 Direction::Upstream,
+//             )));
+//             let middle_idx = edit_lock.selection().active;
+//             edit_lock.handle_action(Action::MoveSelecting(Movement::Grapheme(
+//                 Direction::Upstream,
+//             )));
+//             let selection = edit_lock.selection();
+//             let first_grapheme = edit_lock.slice(selection.min()..middle_idx).into_owned();
+//             let second_grapheme = edit_lock.slice(middle_idx..selection.max());
+//             let new_string = format!("{}{}", second_grapheme, first_grapheme);
+//             // replace_range should automatically set selection to end of inserted range
+//             edit_lock.replace_range(selection.range(), &new_string);
+//         }
+//         "capitalizeWord:" => {
+//             // this command expands the selection to words, and then applies titlecase to that selection
+//             // not actually sure what keyboard shortcut corresponds to this or the other case changing commands,
+//             // but textedit seems to have this behavior when this action is simulated by editing DefaultKeyBinding.dict.
+//             edit_lock.handle_action(Action::SelectWord);
+//             edit_lock.handle_action(Action::TitlecaseSelection)
+//         }
+//         "lowercaseWord:" => {
+//             // this command expands the selection to words, and then applies uppercase to that selection
+//             edit_lock.handle_action(Action::SelectWord);
+//             edit_lock.handle_action(Action::LowercaseSelection);
+//         }
+//         "uppercaseWord:" => {
+//             // this command expands the selection to words, and then applies uppercase to that selection
+//             edit_lock.handle_action(Action::SelectWord);
+//             edit_lock.handle_action(Action::UppercaseSelection);
+//         }
+//         "insertDoubleQuoteIgnoringSubstitution:" => {
+//             edit_lock.handle_action(Action::InsertDoubleQuoteIgnoringSmartQuotes)
+//         }
+//         "insertSingleQuoteIgnoringSubstitution:" => {
+//             edit_lock.handle_action(Action::InsertSingleQuoteIgnoringSmartQuotes)
+//         }
+//         "cancelOperation:" => edit_lock.handle_action(Action::Cancel),
+//         // "deleteToMark:" => {}          // TODO(lord): selectToMark, then delete selection. also puts selection in yank buffer
+//         // "selectToMark:" => {}          // TODO(lord): extends the selection to include the mark
+//         // "setMark:" => {}               // TODO(lord): remembers index in document (but what about grapheme clusters??)
+//         // "swapWithMark:" => {}          // TODO(lord): swaps current and stored mark indices
+//         // "yank:" => {}                  // TODO(lord): triggered with control-y, inserts in the text previously killed deleteTo*OfParagraph
+//         "transposeWords:" => {} // textedit doesn't support, so neither will we
+//         "changeCaseOfLetter:" => {} // textedit doesn't support, so neither will we
+//         "indent:" => {}         // textedit doesn't support, so neither will we
+//         "insertContainerBreak:" => {} // textedit and pages don't seem to support, so neither will we
+//         "quickLookPreviewItems:" => {} // don't seem to apply to text editing?? hopefully
+//         // TODO(lord): reply to cmyr comment
+//         "complete:" => {
+//             // these are normally intercepted by the IME; if it gets to us, log
+//             eprintln!("got an unexpected 'complete' text input command from macOS");
+//         }
+//         "noop:" => {}
+//         e => {
+//             eprintln!("unknown text editing command from macOS: {}", e);
+//         }
+//     };
+// }
 
 /// Parses the UTF-16 `NSRange` into a UTF-8 `Range<usize>`.
 /// `start_offset` is the UTF-8 offset into the document that `range` values are relative to. Set it to `0` if `range`

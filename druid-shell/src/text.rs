@@ -421,6 +421,12 @@ pub trait InputHandler {
     /// Given a `Point`, determine the corresponding text position.
     fn hit_test_point(&self, point: Point) -> HitTestPoint;
 
+    /// If the text input is active
+    fn is_active(&self) -> bool;
+
+    /// The input method inserts text
+    fn insert_text(&mut self, text: &str);
+
     /// Returns the range, in UTF-8 code units, of the line (soft- or hard-wrapped)
     /// containing the byte specified by `index`.
     fn line_range(&self, index: usize, affinity: Affinity) -> Range<usize>;

@@ -941,14 +941,16 @@ extern "C" fn key_down(this: &mut Object, _: Sel, nsevent: id) {
         let view_state: *mut c_void = *this.get_ivar("viewState");
         &mut *(view_state as *mut ViewState)
     };
-    if let Some(event) = (*view_state).keyboard_state.process_native_event(nsevent) {
-        if !(*view_state).handler.key_down(event) {
-            // key down not handled; foward to text input system
+    with_edit_lock_from_window(this, false, |edit_lock| {
+        if edit_lock.is_active() {
             unsafe {
                 let events = NSArray::arrayWithObjects(nil, &[nsevent]);
                 let _: () = msg_send![*(*view_state).nsview.load(), interpretKeyEvents: events];
             }
         }
+    });
+    if let Some(event) = (*view_state).keyboard_state.process_native_event(nsevent) {
+        (*view_state).handler.key_down(event);
     }
 }
 
