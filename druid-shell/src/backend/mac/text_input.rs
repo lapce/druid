@@ -25,7 +25,7 @@ use std::ffi::c_void;
 use std::ops::Range;
 use std::os::raw::c_uchar;
 
-use super::window::with_edit_lock_from_window;
+use super::window::{with_edit_lock_from_window, ViewState};
 use crate::kurbo::Point;
 use crate::text::{
     Action, Affinity, Direction, InputHandler, Movement, Selection, VerticalMovement,
@@ -100,6 +100,14 @@ pub extern "C" fn set_marked_text(
     selected_range: NSRange,
     replacement_range: NSRange,
 ) {
+    {
+        let view_state = unsafe {
+            let view_state: *mut c_void = *this.get_ivar("viewState");
+            &mut *(view_state as *mut ViewState)
+        };
+        (*view_state).key_triggered_ime = true;
+    }
+
     with_edit_lock_from_window(this, true, |mut edit_lock| {
         let mut composition_range = edit_lock.composition_range().unwrap_or_else(|| {
             // no existing composition range? default to replacement range, interpreted in absolute coordinates
@@ -192,7 +200,15 @@ pub extern "C" fn attributed_substring_for_proposed_range(
 }
 
 pub extern "C" fn insert_text(this: &mut Object, _: Sel, text: id, replacement_range: NSRange) {
+    let view_state = unsafe {
+        let view_state: *mut c_void = *this.get_ivar("viewState");
+        &mut *(view_state as *mut ViewState)
+    };
+
     with_edit_lock_from_window(this, true, |mut edit_lock| {
+        if edit_lock.composition_range().is_some() {
+            (*view_state).key_triggered_ime = true;
+        }
         let text_string = parse_attributed_string(&text);
 
         // yvt notes:

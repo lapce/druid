@@ -181,7 +181,7 @@ enum IdleKind {
 }
 
 /// This is the state associated with our custom NSView.
-struct ViewState {
+pub(crate) struct ViewState {
     nswindow: WeakPtr,
     nsview: WeakPtr,
     handler: Box<dyn WinHandler>,
@@ -191,6 +191,10 @@ struct ViewState {
     // Tracks whether we have already received the mouseExited event
     mouse_left: bool,
     keyboard_state: KeyboardState,
+    /// This is used to detect if a key-press causes an ime event.
+    /// If a key-press does not cause an ime event, that means
+    /// that the key-press cancelled the ime session. (Except arrow keys)
+    pub(crate) key_triggered_ime: bool,
     gl_context: Context,
     renderer: WgpuRenderer,
     active_text_input: Option<TextFieldToken>,
@@ -679,6 +683,7 @@ fn make_view(
             context_menu_pos: Point::ZERO,
             dragable_area: Region::EMPTY,
             drag_window: false,
+            key_triggered_ime: false,
         };
 
         let state_ptr = Box::into_raw(Box::new(view_state)) as *mut c_void;
@@ -941,17 +946,36 @@ extern "C" fn key_down(this: &mut Object, _: Sel, nsevent: id) {
         let view_state: *mut c_void = *this.get_ivar("viewState");
         &mut *(view_state as *mut ViewState)
     };
+    (*view_state).key_triggered_ime = false;
+    let mut had_composition = false;
     with_edit_lock_from_window(this, false, |edit_lock| {
         if edit_lock.is_active() {
+            had_composition = edit_lock.composition_range().is_some();
             unsafe {
                 let events = NSArray::arrayWithObjects(nil, &[nsevent]);
                 let _: () = msg_send![*(*view_state).nsview.load(), interpretKeyEvents: events];
             }
         }
     });
-    if let Some(event) = (*view_state).keyboard_state.process_native_event(nsevent) {
+
+    if let Some(mut event) = (*view_state).keyboard_state.process_native_event(nsevent) {
+        if had_composition && is_arrow_key(event.code) {
+            (*view_state).key_triggered_ime = true;
+        }
+
+        event.is_composing = (*view_state).key_triggered_ime;
         (*view_state).handler.key_down(event);
     }
+}
+
+fn is_arrow_key(keycode: keyboard_types::Code) -> bool {
+    matches!(
+        keycode,
+        keyboard_types::Code::ArrowUp
+            | keyboard_types::Code::ArrowDown
+            | keyboard_types::Code::ArrowLeft
+            | keyboard_types::Code::ArrowRight
+    )
 }
 
 extern "C" fn key_up(this: &mut Object, _: Sel, nsevent: id) {
