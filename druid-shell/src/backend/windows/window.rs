@@ -960,17 +960,20 @@ impl WndProc for MyWndProc {
             WM_NCCALCSIZE => unsafe {
                 if wparam != 0 && !self.has_titlebar() {
                     if let Ok(handle) = self.handle.try_borrow() {
-                        if handle.get_window_state() == window::WindowState::Maximized {
-                            // When maximized, windows still adds offsets for the frame
-                            // so we counteract them here.
-                            let s: *mut NCCALCSIZE_PARAMS = lparam as *mut NCCALCSIZE_PARAMS;
-                            if let Some(mut s) = s.as_mut() {
-                                let border = self.get_system_metric(SM_CXPADDEDBORDER);
-                                let frame = self.get_system_metric(SM_CYSIZEFRAME);
+                        let s: *mut NCCALCSIZE_PARAMS = lparam as *mut NCCALCSIZE_PARAMS;
+                        if let Some(mut s) = s.as_mut() {
+                            let border = self.get_system_metric(SM_CXPADDEDBORDER);
+                            let frame = self.get_system_metric(SM_CYSIZEFRAME);
+                            // When the window does not have a title bar, the location of the
+                            // resizing borders moves inside the window, so we subtract them
+                            // from it
+                            s.rgrc[0].right -= (border + frame) as i32;
+                            s.rgrc[0].left += (border + frame) as i32;
+                            s.rgrc[0].bottom -= (border + frame) as i32;
+                            if handle.get_window_state() == window::WindowState::Maximized {
+                                // When maximized, windows still adds offsets for the frame
+                                // so we counteract them here.
                                 s.rgrc[0].top += (border + frame) as i32;
-                                s.rgrc[0].right -= (border + frame) as i32;
-                                s.rgrc[0].left += (border + frame) as i32;
-                                s.rgrc[0].bottom -= (border + frame) as i32;
                             }
                         }
                     }
