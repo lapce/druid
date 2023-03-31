@@ -1237,6 +1237,7 @@ impl WindowHandle {
     pub fn bring_to_front_and_focus(&self) {
         unsafe {
             let window: id = msg_send![*self.nsview.load(), window];
+            let () = msg_send![NSApp(), performSelectorOnMainThread: sel!(activateIgnoringOtherApps:) withObject: YES waitUntilDone: NO];
             let () = msg_send![window, performSelectorOnMainThread: sel!(makeKeyAndOrderFront:) withObject: nil waitUntilDone: NO];
         }
     }
